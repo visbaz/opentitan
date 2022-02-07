@@ -21,7 +21,7 @@ class spi_host_tx_rx_vseq extends spi_host_base_vseq;
   virtual task start_spi_host_trans(int num_transactions, bit wait_ready = 1'b1);
     spi_host_status_t status;
     program_spi_host_regs();
-    if (wait_ready) wait_ready_for_command();
+    if(wait_ready) wait_ready_for_command();
     csr_rd(.ptr(ral.status), .value(status));
     cfg.seq_cfg.host_spi_min_len = 4;
     cfg.seq_cfg.host_spi_max_len = 16;
@@ -29,7 +29,7 @@ class spi_host_tx_rx_vseq extends spi_host_base_vseq;
     for (int n = 0; n < num_transactions; n++) begin
       generate_transaction();
       send_trans(transaction, wait_ready);
-      if (wait_ready) wait_ready_for_command();
+      if(wait_ready) wait_ready_for_command();
     end
   endtask
 

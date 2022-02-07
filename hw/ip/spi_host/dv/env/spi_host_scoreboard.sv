@@ -246,7 +246,7 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           spi_ctrl_reg.tx_watermark = get_field_val(ral.control.tx_watermark, item.a_data);
           spi_ctrl_reg.rx_watermark = get_field_val(ral.control.rx_watermark, item.a_data);
           if (cfg.en_cov) begin
-            cov.control_cg.sample(spi_ctrl_reg,spien,output_en,sw_rst);
+          cov.control_cg.sample(spi_ctrl_reg,spien,output_en,sw_rst);
           end
           if (sw_rst || spien) begin
             write_segment_q.delete();
@@ -277,7 +277,7 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           spi_configopts.csntrail[csr_idx] = get_field_val(ral.configopts[csr_idx].csntrail,
                                                            item.a_data);
           if (cfg.en_cov) begin
-            cov.config_opts_cg.sample(spi_configopts);
+          cov.config_opts_cg.sample(spi_configopts);
           end
         end
 
@@ -300,8 +300,8 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
                                         wr_segment.convert2string()), UVM_HIGH)
           end
           if (cfg.en_cov) begin
-            cov.duplex_cg.sample(spi_cmd_reg.direction);
-            cov.command_cg.sample(spi_cmd_reg);
+          cov.duplex_cg.sample(spi_cmd_reg.direction);
+          cov.command_cg.sample(spi_cmd_reg);
           end
           // clear item
           host_wr_segment = new();
@@ -315,14 +315,15 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           spi_intr_test_reg.spi_event  = bit'(get_field_val(ral.intr_test.spi_event, item.a_data));
           spi_intr_test_reg.error      = bit'(get_field_val(ral.intr_test.error, item.a_data));
           if (cfg.en_cov) begin
-            bit [TL_DW-1:0] intr_en = `gmv(ral.intr_enable);
-            bit [NumSpiHostIntr-1:0] intr_exp = item.a_data | `gmv(ral.intr_state);
-            void'(ral.intr_state.predict(.value(intr_exp), .kind(UVM_PREDICT_DIRECT)));
-            if (cfg.en_cov) begin
-              foreach (intr_exp[i]) begin
-                cov.intr_test_cg.sample(i, item.a_data[i], intr_en[i], intr_exp[i]);
-              end
+          bit [TL_DW-1:0] intr_en = `gmv(ral.intr_enable);
+          bit [NumSpiHostIntr-1:0] intr_exp = item.a_data | `gmv(ral.intr_state);
+          void'(ral.intr_state.predict(.value(intr_exp), .kind(UVM_PREDICT_DIRECT)));
+         // sample coverage
+          if (cfg.en_cov) begin
+            foreach (intr_exp[i]) begin
+              cov.intr_test_cg.sample(i, item.a_data[i], intr_en[i], intr_exp[i]);
             end
+          end
           end
         end
         "status": begin
@@ -341,13 +342,13 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
          spi_status_reg.rx_qd       =  get_field_val(ral.status.rxqd, item.a_data);
          spi_status_reg.tx_qd       =  get_field_val(ral.status.txqd, item.a_data);
           if (cfg.en_cov) begin
-            cov.status_cg.sample(spi_status_reg);
+          cov.status_cg.sample(spi_status_reg);
           end
         end
         "csid": begin
           spi_ctrl_reg.csid = item.a_data;
           if (cfg.en_cov) begin
-            cov.csid_cg.sample(spi_ctrl_reg);
+          cov.csid_cg.sample(spi_ctrl_reg);
           end
         end
         "error_enable": begin
@@ -362,7 +363,7 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           spi_error_enable_reg.cmdbusy       = bit'(get_field_val(ral.error_enable.cmdbusy,
                                                                   item.a_data));
           if (cfg.en_cov) begin
-            cov.error_en_cg.sample(spi_error_enable_reg);
+          cov.error_en_cg.sample(spi_error_enable_reg);
           end
         end
         "event_enable": begin
@@ -379,7 +380,7 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           spi_event_enable_reg.rxfull    = bit'(get_field_val(ral.event_enable.rxfull,
                                                               item.a_data));
           if (cfg.en_cov) begin
-            cov.event_en_cg.sample(spi_event_enable_reg);
+          cov.event_en_cg.sample(spi_event_enable_reg);
           end
         end
         default: begin
@@ -394,12 +395,12 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
                                                             item.a_data));
          spi_intr_state_reg.error      = bit'(get_field_val(ral.intr_state.error, item.a_data));
          if (cfg.en_cov) begin
-           bit [TL_DW-1:0]         intr_en  = `gmv(ral.intr_enable);
-           bit [NumSpiHostIntr-1:0]  intr_exp = `gmv(ral.intr_state);
-             foreach (intr_exp[i]) begin
-               cov.intr_cg.sample(i, intr_en[i], item.d_data);
-               cov.intr_pins_cg.sample(i, cfg.intr_vif.pins[i]);
-             end
+         bit [TL_DW-1:0]         intr_en  = `gmv(ral.intr_enable);
+         bit [NumSpiHostIntr-1:0]  intr_exp = `gmv(ral.intr_state);
+           foreach (intr_exp[i]) begin
+             cov.intr_cg.sample(i, intr_en[i], item.d_data);
+             cov.intr_pins_cg.sample(i, cfg.intr_vif.pins[i]);
+           end
          end
          end
         "error_status": begin
@@ -416,7 +417,7 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           spi_error_status_reg.cmdbusy       = bit'(get_field_val(ral.error_status.cmdbusy,
                                                                   item.a_data));
           if (cfg.en_cov) begin
-            cov.error_status_cg.sample(spi_error_status_reg, spi_error_enable_reg);
+          cov.error_status_cg.sample(spi_error_status_reg, spi_error_enable_reg);
           end
         end
         default: begin
@@ -453,7 +454,7 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
     `DV_EOT_PRINT_Q_CONTENTS(spi_segment_item, read_segment_q)
     `DV_EOT_PRINT_TLM_FIFO_CONTENTS(spi_item, host_data_fifo)
     `DV_EOT_PRINT_TLM_FIFO_CONTENTS(spi_item, device_data_fifo)
-    if ((rx_data_q.size() != 0))
+    if((rx_data_q.size() != 0))
       `uvm_fatal(`gfn, $sformatf("ERROR - RX FIFO in DUT still has data to be read!"))
   endfunction : check_phase
 
