@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <assert.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "sw/device/lib/base/freestanding/limits.h"
+#include "sw/device/lib/base/math.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/dif/dif_alert_handler.h"
 #include "sw/device/lib/dif/dif_aon_timer.h"
@@ -34,10 +35,10 @@ const test_config_t kTestConfig;
  * wdog is programed to bark.
  */
 enum {
-  kWdogBarkMicros = 4 * 1000,          // 4 ms
-  kWdogBiteMicros = 5 * 1000,          // 5 ms
-  kEscalationPhase0Micros = 3 * 1000,  // 3 ms
-  kEscalationPhase1Micros = 3 * 1000,  // 3 ms
+  kWdogBarkMicros = 3 * 1000,          // 3 ms
+  kWdogBiteMicros = 4 * 1000,          // 4 ms
+  kEscalationPhase0Micros = 1 * 1000,  // 1 ms
+  kEscalationPhase1Micros = 5 * 1000,  // 5 ms
   kEscalationPhase2Micros = 500,       // 500 us
 };
 
@@ -146,21 +147,22 @@ static void alert_handler_config(void) {
   dif_alert_handler_escalation_phase_t esc_phases[] = {
       {.phase = kDifAlertHandlerClassStatePhase0,
        .signal = 0,
-       .duration_cycles =
-           kEscalationPhase0Micros * kClockFreqPeripheralHz / 1000000},
+       .duration_cycles = udiv64_slow(
+           kEscalationPhase0Micros * kClockFreqPeripheralHz, 1000000, NULL)},
       {.phase = kDifAlertHandlerClassStatePhase1,
        .signal = 1,
-       .duration_cycles =
-           kEscalationPhase1Micros * kClockFreqPeripheralHz / 1000000},
+       .duration_cycles = udiv64_slow(
+           kEscalationPhase1Micros * kClockFreqPeripheralHz, 1000000, NULL)},
       {.phase = kDifAlertHandlerClassStatePhase2,
        .signal = 3,
-       .duration_cycles =
-           kEscalationPhase2Micros * kClockFreqPeripheralHz / 1000000}};
+       .duration_cycles = udiv64_slow(
+           kEscalationPhase2Micros * kClockFreqPeripheralHz, 1000000, NULL)}};
 
   dif_alert_handler_class_config_t class_config[] = {{
       .auto_lock_accumulation_counter = kDifToggleDisabled,
       .accumulator_threshold = 0,
-      .irq_deadline_cycles = 10 * kClockFreqPeripheralHz / 1000000,
+      .irq_deadline_cycles =
+          udiv64_slow(10 * kClockFreqPeripheralHz, 1000000, NULL),
       .escalation_phases = esc_phases,
       .escalation_phases_len = ARRAYSIZE(esc_phases),
       .crashdump_escalation_phase = kDifAlertHandlerClassStatePhase3,
@@ -188,8 +190,10 @@ static void alert_handler_config(void) {
  * Execute the aon timer interrupt test.
  */
 static void execute_test(dif_aon_timer_t *aon_timer) {
-  uint64_t bark_cycles = (kWdogBarkMicros * kClockFreqAonHz / 1000000);
-  uint64_t bite_cycles = (kWdogBiteMicros * kClockFreqAonHz / 1000000);
+  uint64_t bark_cycles =
+      udiv64_slow(kWdogBarkMicros * kClockFreqAonHz, 1000000, NULL);
+  uint64_t bite_cycles =
+      udiv64_slow(kWdogBiteMicros * kClockFreqAonHz, 1000000, NULL);
 
   CHECK(bite_cycles < UINT32_MAX,
         "The value %u can't fit into the 32 bits timer counter.", bite_cycles);
@@ -206,6 +210,7 @@ static void execute_test(dif_aon_timer_t *aon_timer) {
   // Trigger the alert handler to escalate.
   dif_pwrmgr_alert_t alert = kDifPwrmgrAlertFatalFault;
   CHECK_DIF_OK(dif_pwrmgr_alert_force(&pwrmgr, alert));
+  busy_spin_micros(kEscalationPhase0Micros);
   CHECK(false, "The alert handler failed to escalate");
 }
 

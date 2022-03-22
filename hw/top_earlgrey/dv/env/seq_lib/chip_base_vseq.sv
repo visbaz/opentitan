@@ -10,6 +10,8 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
   );
   `uvm_object_utils(chip_base_vseq)
 
+  typedef enum int {ExtClkFreq48MHz = 48, ExtClkFreq100MHz = 100} ext_clk_freq_e;
+
   // knobs to enable pre_start routines
   bit do_strap_pins_init = 1'b1; // initialize the strap
 
@@ -51,6 +53,8 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
     super.apply_reset(kind);
   endtask
 
+  chip_callback_vseq callback_vseq;
+
   virtual task dut_init(string reset_kind = "HARD");
     // Initialize gpio pin default states
     cfg.gpio_vif.set_pulldown_en({chip_env_pkg::NUM_GPIOS{1'b1}});
@@ -59,15 +63,13 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
     cfg.mem_bkdr_util_h[FlashBank1Info].set_mem();
     // Backdoor load the OTP image.
     cfg.mem_bkdr_util_h[Otp].load_mem_from_file(cfg.otp_images[cfg.use_otp_image]);
-    // Backdoor load AST setup.
-    // The delay here is required to avoid race condition with the image load above
-    #0;
-    cfg.mem_bkdr_util_h[Otp].write32(otp_ctrl_reg_pkg::CreatorSwCfgAstInitEnOffset,
-                                     prim_mubi_pkg::MuBi4True);
+    initialize_otp_creator_sw_cfg_ast_cfg();
+    callback_vseq.pre_dut_init();
     // Randomize the ROM image. Subclasses that have an actual ROM image will load it later.
     cfg.mem_bkdr_util_h[Rom].randomize_mem();
     // Bring the chip out of reset.
     super.dut_init(reset_kind);
+    callback_vseq.post_dut_init();
   endtask
 
   virtual task dut_shutdown();
@@ -78,7 +80,11 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
   virtual task pre_start();
     // Do DUT init after some additional settings.
     bit do_dut_init_save = do_dut_init;
+    int extclk_frequency_mhz = ExtClkFreq100MHz;
+    int extclk_frequency_attempted;
     do_dut_init = 1'b0;
+    `uvm_create_on(callback_vseq, p_sequencer);
+    `DV_CHECK_RANDOMIZE_FATAL(callback_vseq)
     super.pre_start();
     do_dut_init = do_dut_init_save;
 
@@ -88,6 +94,19 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
       cfg.dft_straps_vif.drive(2'b00);
       cfg.sw_straps_vif.drive({2'b00, cfg.use_spi_load_bootstrap});
     end
+
+    // Set external clock frequency.
+    if ($value$plusargs("extclk_freq_mhz=%d", extclk_frequency_attempted)) begin
+      if (extclk_frequency_attempted == ExtClkFreq100MHz ||
+          extclk_frequency_attempted == ExtClkFreq48MHz) begin
+        extclk_frequency_mhz = extclk_frequency_attempted;
+      end else begin
+        `uvm_error(`gfn, $sformatf(
+                   "Unexpected extclk frequency %0d: valid numbers are 100 and 48",
+                   extclk_frequency_attempted))
+      end
+    end
+    cfg.clk_rst_vif.set_freq_mhz(extclk_frequency_mhz);
 
     // Now safe to do DUT init.
     if (do_dut_init) dut_init();
@@ -102,5 +121,25 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
       uart_tx_data_q.push_back(item.data);
     end
   endtask
+
+  // Initialize the OTP creator SW cfg region with AST configuration data.
+  virtual function void initialize_otp_creator_sw_cfg_ast_cfg();
+    // The knob controls whether the AST is actually programmed.
+    if (cfg.do_creator_sw_cfg_ast_cfg) begin
+      cfg.mem_bkdr_util_h[Otp].write32(otp_ctrl_reg_pkg::CreatorSwCfgAstInitEnOffset,
+                                       prim_mubi_pkg::MuBi4True);
+    end
+
+    // Ensure that the allocated size of the AST cfg region in OTP is equal to the number of AST
+    // registers to be programmed.
+    `DV_CHECK_EQ_FATAL(otp_ctrl_reg_pkg::CreatorSwCfgAstCfgSize, ast_pkg::AstRegsNum * 4)
+    foreach (cfg.creator_sw_cfg_ast_cfg_data[i]) begin
+      `uvm_info(`gfn, $sformatf({"OTP: Preloading creator_sw_cfg_ast_cfg_data[%0d] with 0x%0h ",
+                                 "via backdoor"}, i, cfg.creator_sw_cfg_ast_cfg_data[i]),
+                UVM_MEDIUM)
+      cfg.mem_bkdr_util_h[Otp].write32(
+          otp_ctrl_reg_pkg::CreatorSwCfgAstCfgOffset + i * 4, cfg.creator_sw_cfg_ast_cfg_data[i]);
+    end
+  endfunction
 
 endclass : chip_base_vseq

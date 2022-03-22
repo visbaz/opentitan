@@ -13,14 +13,15 @@
     { name: "op_done",   desc: "Operation complete" },
   ],
   alert_list: [
-    { name: "fatal_fault_err",
-      desc: "Alert for key manager faults.  These errors cannot be caused by software",
-    },
     { name: "recov_operation_err",
       desc: '''
         Alert for key manager operation errors.  These errors could have been caused by
         software'''
-    }
+    },
+    { name: "fatal_fault_err",
+      desc: "Alert for key manager faults.  These errors cannot be caused by software",
+    },
+
   ],
 
   inter_signal_list: [
@@ -294,6 +295,11 @@
         further legal operations from executing.
       '''
     }
+    { name: "CTRL.FSM.CONSISTENCY",
+      desc: '''
+        Main and operational fsm transitions are consistent with software commands.
+      '''
+    }
     { name: "CTRL.FSM.GLOBAL_ESC",
       desc: '''
         When the system globally escalates, the main control fsm also transitions to invalid state
@@ -315,9 +321,29 @@
         Primary count uses cross count.
       '''
     }
+    { name: "KMAC_IF_CMD.CTRL.CONSISTENCY",
+      desc: '''
+        One hot check for kmac interface commands.
+      '''
+    }
+    { name: "KMAC_IF_DONE.CTRL.CONSISTENCY",
+      desc: '''
+        Spurious kmac done check.
+      '''
+    }
     { name: "RESEED.CTR.REDUN",
       desc: '''
         Primary count is duplicated.
+      '''
+    }
+    { name: "SIDE_LOAD_SEL.CTRL.CONSISTENCY",
+      desc: '''
+        Sideload key slot select is checked for consistency against original software command.
+      '''
+    }
+    { name: "CTRL.KEY.INTEGRITY",
+      desc: '''
+        Internal secret key is protected with ECC.
       '''
     }
   ]
@@ -1030,44 +1056,64 @@
           desc: "The kmac transfer interface is in an error state, asynchronous fault.",
         },
         { bits: "2",
+          name: "KMAC_DONE",
+          resval: "0x0"
+          desc: "The kmac transfer interface encountered unexpected done, asynchronous fault.",
+        },
+        { bits: "3",
           name: "KMAC_OP",
           resval: "0x0"
           desc: "KMAC reported an error during keymgr usage, this should never happen - synchronous fault.",
         },
-        { bits: "3",
+        { bits: "4",
           name: "KMAC_OUT",
           resval: "0x0"
           desc: "KMAC data returned as all 0's or all 1's - synchronous fault",
         },
-        { bits: "4",
+        { bits: "5",
           name: "REGFILE_INTG",
           resval: "0x0"
           desc: "Register file integrity error, asynchronous fault",
         },
-        { bits: "5",
+        { bits: "6",
           name: "SHADOW",
           resval: "0x0"
           desc: "Shadow copy storage error, asynchronous fault",
         },
-        { bits: "6",
+        { bits: "7",
           name: "CTRL_FSM_INTG",
           resval: "0x0"
           desc: "Control FSM integrity error, asynchronous fault",
         },
-        { bits: "7",
+        { bits: "8",
+          name: "CTRL_FSM_CHK",
+          resval: "0x0"
+          desc: "Control FSM cross check error, asynchronous fault",
+        },
+        { bits: "9",
           name: "CTRL_FSM_CNT",
           resval: "0x0"
           desc: "Control FSM counter integrity error, asynchronous fault",
         },
-        { bits: "8",
+        { bits: "10",
           name: "RESEED_CNT",
           resval: "0x0"
           desc: "Reseed counter integrity error, asynchronous fault",
         },
-        { bits: "9",
+        { bits: "11",
           name: "SIDE_CTRL_FSM",
           resval: "0x0"
           desc: "Sideload control FSM integrity error, asynchronous fault",
+        },
+        { bits: "12",
+          name: "SIDE_CTRL_SEL",
+          resval: "0x0"
+          desc: "Sideload control key select error, synchronous fault",
+        },
+        { bits: "13",
+          name: "KEY_ECC",
+          resval: "0x0"
+          desc: "Secret key ecc error, asynchronous fault",
         },
       ]
     },

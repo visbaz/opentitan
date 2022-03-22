@@ -37,11 +37,11 @@ package keymgr_reg_pkg;
     struct packed {
       logic        q;
       logic        qe;
-    } fatal_fault_err;
+    } recov_operation_err;
     struct packed {
       logic        q;
       logic        qe;
-    } recov_operation_err;
+    } fatal_fault_err;
   } keymgr_reg2hw_alert_test_reg_t;
 
   typedef struct packed {
@@ -124,6 +124,9 @@ package keymgr_reg_pkg;
     } kmac_fsm;
     struct packed {
       logic        q;
+    } kmac_done;
+    struct packed {
+      logic        q;
     } kmac_op;
     struct packed {
       logic        q;
@@ -139,6 +142,9 @@ package keymgr_reg_pkg;
     } ctrl_fsm_intg;
     struct packed {
       logic        q;
+    } ctrl_fsm_chk;
+    struct packed {
+      logic        q;
     } ctrl_fsm_cnt;
     struct packed {
       logic        q;
@@ -146,6 +152,12 @@ package keymgr_reg_pkg;
     struct packed {
       logic        q;
     } side_ctrl_fsm;
+    struct packed {
+      logic        q;
+    } side_ctrl_sel;
+    struct packed {
+      logic        q;
+    } key_ecc;
   } keymgr_reg2hw_fault_status_reg_t;
 
   typedef struct packed {
@@ -213,6 +225,10 @@ package keymgr_reg_pkg;
     struct packed {
       logic        d;
       logic        de;
+    } kmac_done;
+    struct packed {
+      logic        d;
+      logic        de;
     } kmac_op;
     struct packed {
       logic        d;
@@ -233,6 +249,10 @@ package keymgr_reg_pkg;
     struct packed {
       logic        d;
       logic        de;
+    } ctrl_fsm_chk;
+    struct packed {
+      logic        d;
+      logic        de;
     } ctrl_fsm_cnt;
     struct packed {
       logic        d;
@@ -242,41 +262,49 @@ package keymgr_reg_pkg;
       logic        d;
       logic        de;
     } side_ctrl_fsm;
+    struct packed {
+      logic        d;
+      logic        de;
+    } side_ctrl_sel;
+    struct packed {
+      logic        d;
+      logic        de;
+    } key_ecc;
   } keymgr_hw2reg_fault_status_reg_t;
 
   // Register -> HW type
   typedef struct packed {
-    keymgr_reg2hw_intr_state_reg_t intr_state; // [942:942]
-    keymgr_reg2hw_intr_enable_reg_t intr_enable; // [941:941]
-    keymgr_reg2hw_intr_test_reg_t intr_test; // [940:939]
-    keymgr_reg2hw_alert_test_reg_t alert_test; // [938:935]
-    keymgr_reg2hw_start_reg_t start; // [934:934]
-    keymgr_reg2hw_control_shadowed_reg_t control_shadowed; // [933:927]
-    keymgr_reg2hw_sideload_clear_reg_t sideload_clear; // [926:924]
-    keymgr_reg2hw_reseed_interval_shadowed_reg_t reseed_interval_shadowed; // [923:908]
-    keymgr_reg2hw_sw_binding_regwen_reg_t sw_binding_regwen; // [907:906]
-    keymgr_reg2hw_sealing_sw_binding_mreg_t [7:0] sealing_sw_binding; // [905:650]
-    keymgr_reg2hw_attest_sw_binding_mreg_t [7:0] attest_sw_binding; // [649:394]
-    keymgr_reg2hw_salt_mreg_t [7:0] salt; // [393:138]
-    keymgr_reg2hw_key_version_mreg_t [0:0] key_version; // [137:106]
-    keymgr_reg2hw_max_creator_key_ver_shadowed_reg_t max_creator_key_ver_shadowed; // [105:74]
-    keymgr_reg2hw_max_owner_int_key_ver_shadowed_reg_t max_owner_int_key_ver_shadowed; // [73:42]
-    keymgr_reg2hw_max_owner_key_ver_shadowed_reg_t max_owner_key_ver_shadowed; // [41:10]
-    keymgr_reg2hw_fault_status_reg_t fault_status; // [9:0]
+    keymgr_reg2hw_intr_state_reg_t intr_state; // [946:946]
+    keymgr_reg2hw_intr_enable_reg_t intr_enable; // [945:945]
+    keymgr_reg2hw_intr_test_reg_t intr_test; // [944:943]
+    keymgr_reg2hw_alert_test_reg_t alert_test; // [942:939]
+    keymgr_reg2hw_start_reg_t start; // [938:938]
+    keymgr_reg2hw_control_shadowed_reg_t control_shadowed; // [937:931]
+    keymgr_reg2hw_sideload_clear_reg_t sideload_clear; // [930:928]
+    keymgr_reg2hw_reseed_interval_shadowed_reg_t reseed_interval_shadowed; // [927:912]
+    keymgr_reg2hw_sw_binding_regwen_reg_t sw_binding_regwen; // [911:910]
+    keymgr_reg2hw_sealing_sw_binding_mreg_t [7:0] sealing_sw_binding; // [909:654]
+    keymgr_reg2hw_attest_sw_binding_mreg_t [7:0] attest_sw_binding; // [653:398]
+    keymgr_reg2hw_salt_mreg_t [7:0] salt; // [397:142]
+    keymgr_reg2hw_key_version_mreg_t [0:0] key_version; // [141:110]
+    keymgr_reg2hw_max_creator_key_ver_shadowed_reg_t max_creator_key_ver_shadowed; // [109:78]
+    keymgr_reg2hw_max_owner_int_key_ver_shadowed_reg_t max_owner_int_key_ver_shadowed; // [77:46]
+    keymgr_reg2hw_max_owner_key_ver_shadowed_reg_t max_owner_key_ver_shadowed; // [45:14]
+    keymgr_reg2hw_fault_status_reg_t fault_status; // [13:0]
   } keymgr_reg2hw_t;
 
   // HW -> register type
   typedef struct packed {
-    keymgr_hw2reg_intr_state_reg_t intr_state; // [566:565]
-    keymgr_hw2reg_cfg_regwen_reg_t cfg_regwen; // [564:564]
-    keymgr_hw2reg_start_reg_t start; // [563:562]
-    keymgr_hw2reg_sw_binding_regwen_reg_t sw_binding_regwen; // [561:561]
-    keymgr_hw2reg_sw_share0_output_mreg_t [7:0] sw_share0_output; // [560:297]
-    keymgr_hw2reg_sw_share1_output_mreg_t [7:0] sw_share1_output; // [296:33]
-    keymgr_hw2reg_working_state_reg_t working_state; // [32:29]
-    keymgr_hw2reg_op_status_reg_t op_status; // [28:26]
-    keymgr_hw2reg_err_code_reg_t err_code; // [25:20]
-    keymgr_hw2reg_fault_status_reg_t fault_status; // [19:0]
+    keymgr_hw2reg_intr_state_reg_t intr_state; // [574:573]
+    keymgr_hw2reg_cfg_regwen_reg_t cfg_regwen; // [572:572]
+    keymgr_hw2reg_start_reg_t start; // [571:570]
+    keymgr_hw2reg_sw_binding_regwen_reg_t sw_binding_regwen; // [569:569]
+    keymgr_hw2reg_sw_share0_output_mreg_t [7:0] sw_share0_output; // [568:305]
+    keymgr_hw2reg_sw_share1_output_mreg_t [7:0] sw_share1_output; // [304:41]
+    keymgr_hw2reg_working_state_reg_t working_state; // [40:37]
+    keymgr_hw2reg_op_status_reg_t op_status; // [36:34]
+    keymgr_hw2reg_err_code_reg_t err_code; // [33:28]
+    keymgr_hw2reg_fault_status_reg_t fault_status; // [27:0]
   } keymgr_hw2reg_t;
 
   // Register offsets
@@ -347,8 +375,8 @@ package keymgr_reg_pkg;
   parameter logic [0:0] KEYMGR_INTR_TEST_RESVAL = 1'h 0;
   parameter logic [0:0] KEYMGR_INTR_TEST_OP_DONE_RESVAL = 1'h 0;
   parameter logic [1:0] KEYMGR_ALERT_TEST_RESVAL = 2'h 0;
-  parameter logic [0:0] KEYMGR_ALERT_TEST_FATAL_FAULT_ERR_RESVAL = 1'h 0;
   parameter logic [0:0] KEYMGR_ALERT_TEST_RECOV_OPERATION_ERR_RESVAL = 1'h 0;
+  parameter logic [0:0] KEYMGR_ALERT_TEST_FATAL_FAULT_ERR_RESVAL = 1'h 0;
   parameter logic [0:0] KEYMGR_CFG_REGWEN_RESVAL = 1'h 1;
   parameter logic [0:0] KEYMGR_CFG_REGWEN_EN_RESVAL = 1'h 1;
   parameter logic [0:0] KEYMGR_SW_BINDING_REGWEN_RESVAL = 1'h 1;

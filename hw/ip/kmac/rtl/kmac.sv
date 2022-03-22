@@ -507,9 +507,9 @@ module kmac
   assign entropy_refresh_req = reg2hw.cmd.entropy_req.q
                             && reg2hw.cmd.entropy_req.qe;
 
-  assign entropy_hash_threshold = reg2hw.entropy_refresh.threshold.q;
-  assign hw2reg.entropy_refresh.hash_cnt.de = 1'b 1;
-  assign hw2reg.entropy_refresh.hash_cnt.d  = entropy_hash_cnt;
+  assign entropy_hash_threshold = reg2hw.entropy_refresh_threshold_shadowed.q;
+  assign hw2reg.entropy_refresh_hash_cnt.de = 1'b 1;
+  assign hw2reg.entropy_refresh_hash_cnt.d  = entropy_hash_cnt;
 
   assign entropy_hash_clr = reg2hw.cmd.hash_cnt_clr.qe
                          && reg2hw.cmd.hash_cnt_clr.q;
@@ -766,6 +766,7 @@ module kmac
       end
     endcase
 
+    // SEC_CM: FSM.GLOBAL_ESC, FSM.LOCAL_ESC
     // Unconditionally jump into the terminal error state
     // if the life cycle controller triggers an escalation.
     if (lc_escalate_en[0] != lc_ctrl_pkg::Off) begin
@@ -1133,6 +1134,7 @@ module kmac
       .ack_o     (entropy_ack),
       .data_o    (entropy_data),
       .fips_o    (entropy_fips),
+      .err_o     (),
       // EDN side
       .clk_edn_i,
       .rst_edn_ni,
@@ -1271,7 +1273,8 @@ module kmac
       reg2hw.cfg_shadowed.msg_mask.err_storage                    ,
       reg2hw.cfg_shadowed.entropy_ready.err_storage               ,
       reg2hw.cfg_shadowed.err_processed.err_storage               ,
-      reg2hw.cfg_shadowed.en_unsupported_modestrength.err_storage
+      reg2hw.cfg_shadowed.en_unsupported_modestrength.err_storage ,
+      reg2hw.entropy_refresh_threshold_shadowed.err_storage
     };
 
   assign shadowed_update_err  = |{
@@ -1286,7 +1289,8 @@ module kmac
       reg2hw.cfg_shadowed.msg_mask.err_update                    ,
       reg2hw.cfg_shadowed.entropy_ready.err_update               ,
       reg2hw.cfg_shadowed.err_processed.err_update               ,
-      reg2hw.cfg_shadowed.en_unsupported_modestrength.err_update
+      reg2hw.cfg_shadowed.en_unsupported_modestrength.err_update ,
+      reg2hw.entropy_refresh_threshold_shadowed.err_update
     };
 
   logic unused_cfg_shadowed_qe;
@@ -1320,7 +1324,18 @@ module kmac
 
   // The recoverable alert is observable via status register until the KMAC operation is restarted
   // by re-writing the Control Register.
-  assign hw2reg.status.alert_recov_ctrl_update_err.d  = alert_recov_operation;
+  logic status_alert_recov_ctrl_update_err;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      status_alert_recov_ctrl_update_err <= 1'b 0;
+    end else if (alert_recov_operation) begin
+      status_alert_recov_ctrl_update_err <= 1'b 1;
+    end else if (err_processed) begin
+      status_alert_recov_ctrl_update_err <= 1'b 0;
+    end
+  end
+
+  assign hw2reg.status.alert_recov_ctrl_update_err.d  = status_alert_recov_ctrl_update_err;
 
   assign alert_fatal = shadowed_storage_err
                      | alert_intg_err
@@ -1330,7 +1345,17 @@ module kmac
                      ;
 
   // Make the fatal alert observable via status register.
-  assign hw2reg.status.alert_fatal_fault.d  = alert_fatal;
+  // Cannot be reset except the hardware reset
+  logic status_alert_fatal_fault;
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      status_alert_fatal_fault <= 1'b 0;
+    end else if (alert_fatal) begin
+      status_alert_fatal_fault <= 1'b 1;
+    end
+  end
+  assign hw2reg.status.alert_fatal_fault.d  = status_alert_fatal_fault;
 
   for (genvar i = 0; i < NumAlerts; i++) begin : gen_alert_tx
     prim_alert_sender #(
@@ -1376,7 +1401,7 @@ module kmac
   logic unused_alerts_q0;
   assign unused_alerts_q0 = alerts_q[0];
 
-  // SEC_CM: LC_ESCALATE_EN.INTERSIG.MUBI
+  // SEC_CM: LC_ESCALATE_EN.INTERSIG.MUBI, FSM.GLOBAL_ESC, FSM.LOCAL_ESC
   lc_ctrl_pkg::lc_tx_t alert_to_lc_tx;
   assign alert_to_lc_tx = lc_ctrl_pkg::lc_tx_bool_to_lc_tx(alerts_q[1]);
   for (genvar i = 0; i < NumLcSyncCopies; i++) begin : gen_or_alert_lc_sync

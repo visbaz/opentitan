@@ -54,11 +54,6 @@ Invalid states, such as `Reset / Disabled` on the other hand, either do not hono
 The data input is dependent on each state, see below.
 
 ### Reset
-
-The key manager working state is not directly reset to any value.
-This ensures there is no deterministic hamming delta upon reset.
-Instead at reset time, the state value is simply unknown - which is expected to be some biased value the registers settle to based on silicon corner and environment conditions.
-
 To begin operation, the state must first transition to Initialize.
 The advancement from `Reset` to `Initialized` is irreversible during the current power cycle.
 Until the initialize command is invoked, the key manager rejects all other software commands.
@@ -89,6 +84,12 @@ Once the `CreatorRootKey` is reached, software can request key manager to advanc
 The key used for all 3 functions is the `CreatorRootKey`.
 
 The advancement from this state to the next is irreversible during the current power cycle.
+
+While in the CreatorRootKey state, the key from OTP is continuously captured and sensed.
+This provides some security benefit as the key is constantly background checked by the OTP.
+When an operation begins, the sampling is stopped.
+If at the conclusion of the operation the key manager stays in the same state, sampling begins again.
+If on the other hand key manager transitions to another state, OTP sampling is stopped until reset.
 
 ### OwnerIntermediateKey
 
@@ -270,31 +271,23 @@ The error is reported in {{< regref FAULT_STATUS >}} and the key manager continu
 
 ### Faults and Operational Faults
 
-Since fatal errors (faults) can happen at any time, their impact on the key manager depends on transaction timing.
-
-If the fault happens while a transaction is ongoing, key manager transitions to the `Invalid` [state](#invalid-entry-wiping).
-
-If the fault happens while there is no transaction, an alert is first sent to the alert handler.
-If before the alert handler escalates an operation is run, the key manager again transitions to `Invalid` [state](#invalid-entry-wiping).
-If the alert handler escalates and disables the key manager, then the key manager will also transition to `Invalid` state if it is not already there.
+When a fatal error is encountered, the key manager transitions to the `Invalid` [state](#invalid-entry-wiping).
+The following are a few examples of when the error occurs and how the key manager behaves.
 
 #### Example 1: Fault During Operation
 The key manager is running a generate operation and a non-onehot command was observed by the kmac interface.
-Since the non-onehot condition is a fault, it will be reflected in {{< regref FAULT_STATUS >}}.
-Since an operation was ongoing when this fault was seen, it will also be reflected in {{< regref ERR_CODE.INVALID_OP >}}.
-This is considered an operational fault and begins transition to `Invalid`.
+Since the non-onehot condition is a fault, it is reflected in {{< regref FAULT_STATUS >}} and a fatal alert is generated.
+The key manager transitions to `Invalid` state, wipes internal storage and reports an invalid operation in {{< regref ERR_CODE.INVALID_OP >}}.
 
 #### Example 2: Fault During Idle
 The key manager is NOT running an operation and is idle.
-During this time, a fault was observed on the regfile (shadow storage error) and FSM (control FSM integrity error).
-The faults will be reflected in {{< regref FAULT_STATUS >}}.
-
-This is **not** considered an operational fault and the key manager will remain in its current state until an operation is invoked or the alert handler escalates.
+During this time, a fault is observed on the regfile (shadow storage error) and FSM (control FSM integrity error).
+The faults are reflected in {{< regref FAULT_STATUS >}}.
+The key manager transitions to `Invalid` state, wipes internal storage but does not report an invalid operation.
 
 #### Example 3: Operation after Fault Detection
-Continuing from the example above, assume now the key manager begins an operation.
-Since the key manager has previous encountered a fault, any operation now is considered an operational fault and begins transition to the `Invalid` [state](#invalid-entry-wiping).
-
+Continuing from the example above, the key manager now begins an operation.
+Since the key manager is already in `Invalid` state, it does not wipe internal storage and reports an invalid operation in {{< regref ERR_CODE.INVALID_OP >}}.
 
 #### Additional Details on Invalid Input
 
@@ -504,6 +497,34 @@ When later a successful `advance` call is made, the key manager then unlocks by 
 An unsuccessful advance call (errors) does not unlock the binding.
 This allows the next stage of software to re-use the binding registers.
 
+### Custom Security Checks
+
+The keymgr has several custom security checks.
+
+#### One-Hot Command Check
+The command received by the kmac interface must always be in one-hot form and unchanging during the life time of a kmac transaction.
+If this check fails, an error is reflected in {{< regref FAULT_STATUS.CMD >}}.
+
+#### Unexpected KMAC Done
+The kmac done signal can only happen during the expected transaction window.
+If this check fails, an error is reflected in {{< regref FAULT_STATUS.KMAC_DONE >}}.
+
+#### Control State Machine Check
+This error checks for two things:
+-  The key manager can advance to one of the key states (e.g. RootKey, OwnerIntermediateKey) only when there is a legal advanced operation.
+-  The key manager can issue an advance or generate operation to the KMAC interface only if the original software request is an advanced or generate command.
+
+If these checks fail, an error is reflected in {{< regref FAULT_STATUS.CTRL_FSM_CHK >}}.
+
+#### Sideload Select Check
+A sideload key slot is selected for update only if the original software request targeted that key slot.
+
+If this check fails, an error is reflected in {{< regref FAULT_STATUS.SIDE_CTRL_SEL >}}.
+
+####
+
+####
+
 ## Hardware Interfaces
 {{< incGenFromIpDesc "../data/keymgr.hjson" "hwcfg" >}}
 
@@ -523,6 +544,11 @@ When issuing the `generate-output-hw` command, software must select a destinatio
 At the conclusion of the command, key and valid signals are forwarded by the key manager to the selected destination primitive.
 The key and valid signals remain asserted to the selected destination until software explicitly disables the output via another command, or issues another `generate-output-hw` command with a different destination primitive.
 
+## Caveats
+The keymgr {{< regref WORKING_STATE >}} register allows software to discover the current state of `keymgr`.
+However, since these values are not hardened, they can be attacked.
+As such, software should be careful to not make critical system decisions based on these registers.
+They are meant generally for informational or debug purposes.
 
 ## Register Table
 

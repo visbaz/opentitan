@@ -13,7 +13,9 @@
 module flash_phy
   import flash_ctrl_pkg::*;
   import prim_mubi_pkg::mubi4_t;
-
+#(
+  parameter bit SecScrambleEn = 1'b1
+)
 (
   input clk_i,
   input rst_ni,
@@ -89,6 +91,9 @@ module flash_phy
   logic [BusWidth-1:0] rd_data [NumBanks];
   logic [NumBanks-1:0] rd_err;
 
+  // fsm error per block
+  logic [NumBanks-1:0] fsm_err;
+
   // select which bank each is operating on
   assign host_bank_sel = host_req_i ? host_addr_i[BusAddrW-1 -: BankW] : '0;
   assign ctrl_bank_sel = flash_ctrl_i.addr[BusAddrW-1 -: BankW];
@@ -111,6 +116,8 @@ module flash_phy
   assign flash_ctrl_o.init_busy = init_busy;
   // feed through host integrity error directly
   assign flash_ctrl_o.intg_err = host_intg_err_i;
+  assign flash_ctrl_o.fsm_err = |fsm_err;
+
 
   // This fifo holds the expected return order
   prim_fifo_sync #(
@@ -211,7 +218,9 @@ module flash_phy
     assign ctrl_req = flash_ctrl_i.req & (ctrl_bank_sel == bank);
     assign ecc_addr[bank][BusBankAddrW +: BankW] = bank;
 
-    flash_phy_core u_core (
+    flash_phy_core #(
+      .SecScrambleEn(SecScrambleEn)
+    ) u_core (
       .clk_i,
       .rst_ni,
       // integrity error is either from host or from controller
@@ -253,7 +262,8 @@ module flash_phy
       .prim_flash_req_o(prim_flash_req[bank]),
       .prim_flash_rsp_i(prim_flash_rsp[bank]),
       .ecc_single_err_o(ecc_single_err[bank]),
-      .ecc_addr_o(ecc_addr[bank][BusBankAddrW-1:0])
+      .ecc_addr_o(ecc_addr[bank][BusBankAddrW-1:0]),
+      .fsm_err_o(fsm_err[bank])
     );
   end // block: gen_flash_banks
 

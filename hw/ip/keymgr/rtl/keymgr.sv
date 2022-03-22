@@ -84,7 +84,7 @@ module keymgr
   /////////////////////////////////////
   // Anchor incoming seeds and constants
   /////////////////////////////////////
-  localparam int TotalSeedWidth = KeyWidth * 9;
+  localparam int TotalSeedWidth = KeyWidth * 10;
   seed_t revision_seed;
   seed_t creator_identity_seed;
   seed_t owner_int_identity_seed;
@@ -94,6 +94,7 @@ module keymgr
   seed_t aes_seed;
   seed_t otbn_seed;
   seed_t kmac_seed;
+  seed_t none_seed;
 
   prim_sec_anchor_buf #(
     .Width(TotalSeedWidth)
@@ -106,7 +107,8 @@ module keymgr
            RndCnstHardOutputSeed,
            RndCnstAesSeed,
            RndCnstOtbnSeed,
-           RndCnstKmacSeed}),
+           RndCnstKmacSeed,
+           RndCnstNoneSeed}),
     .out_o({revision_seed,
             creator_identity_seed,
             owner_int_identity_seed,
@@ -115,7 +117,8 @@ module keymgr
             hard_output_seed,
             aes_seed,
             otbn_seed,
-            kmac_seed})
+            kmac_seed,
+            none_seed})
   );
 
   // Register module
@@ -231,6 +234,7 @@ module keymgr
     .entropy_i('0),
     .state_o(lfsr)
   );
+  `ASSERT_INIT(LfsrWidth_A, LfsrWidth == 64)
 
 
   logic [Shares-1:0][RandWidth-1:0] ctrl_rand;
@@ -261,6 +265,7 @@ module keymgr
   logic kmac_cmd_err;
   logic kmac_fsm_err;
   logic kmac_op_err;
+  logic kmac_done_err;
   logic [Shares-1:0][kmac_pkg::AppDigestW-1:0] kmac_data;
   logic [Shares-1:0][KeyWidth-1:0] kmac_data_truncated;
   logic [ErrLastPos-1:0] err_code;
@@ -268,6 +273,7 @@ module keymgr
   logic sw_binding_unlock;
   logic [CdiWidth-1:0] cdi_sel;
   logic sideload_fsm_err;
+  logic sideload_sel_err;
 
   for (genvar i = 0; i < Shares; i++) begin : gen_truncate_data
     assign kmac_data_truncated[i] = kmac_data[i][KeyWidth-1:0];
@@ -283,6 +289,7 @@ module keymgr
     .shadowed_update_err_i(shadowed_update_err),
     .shadowed_storage_err_i(shadowed_storage_err),
     .reseed_cnt_err_i(reseed_cnt_err),
+    .sideload_sel_err_i(sideload_sel_err),
     .sideload_fsm_err_i(sideload_fsm_err),
     .prng_reseed_req_o(reseed_req),
     .prng_reseed_ack_i(reseed_ack),
@@ -314,6 +321,7 @@ module keymgr
     .kmac_input_invalid_i(kmac_input_invalid),
     .kmac_fsm_err_i(kmac_fsm_err),
     .kmac_op_err_i(kmac_op_err),
+    .kmac_done_err_i(kmac_done_err),
     .kmac_cmd_err_i(kmac_cmd_err),
     .kmac_data_i(kmac_data_truncated)
   );
@@ -439,18 +447,18 @@ module keymgr
 
   // Generate output operation input construction
   logic [KeyWidth-1:0] output_key;
-  keymgr_key_dest_e cipher_sel;
-  logic [KeyWidth-1:0] cipher_seed;
+  keymgr_key_dest_e dest_sel;
+  logic [KeyWidth-1:0] dest_seed;
 
-  assign cipher_sel = keymgr_key_dest_e'(reg2hw.control_shadowed.dest_sel.q);
-  assign cipher_seed = cipher_sel == Aes  ? aes_seed  :
-                       cipher_sel == Kmac ? kmac_seed :
-                       cipher_sel == Otbn ? otbn_seed : RndCnstNoneSeed;
+  assign dest_sel = keymgr_key_dest_e'(reg2hw.control_shadowed.dest_sel.q);
+  assign dest_seed = dest_sel == Aes  ? aes_seed  :
+                       dest_sel == Kmac ? kmac_seed :
+                       dest_sel == Otbn ? otbn_seed : none_seed;
   assign output_key = mubi4_test_true_strict(hw_key_sel) ? hard_output_seed :
                       soft_output_seed;
   assign gen_in = invalid_stage_sel ? {GenLfsrCopies{lfsr[31:0]}} : {reg2hw.key_version,
                                                                      reg2hw.salt,
-                                                                     cipher_seed,
+                                                                     dest_seed,
                                                                      output_key};
 
   // Advance state operation input construction
@@ -516,6 +524,7 @@ module keymgr
     .entropy_i(data_rand),
     .fsm_error_o(kmac_fsm_err),
     .kmac_error_o(kmac_op_err),
+    .kmac_done_error_o(kmac_done_err),
     .cmd_error_o(kmac_cmd_err)
   );
 
@@ -531,7 +540,7 @@ module keymgr
     .entropy_i(data_rand),
     .clr_key_i(keymgr_sideload_clr_e'(reg2hw.sideload_clear.q)),
     .wipe_key_i(wipe_key),
-    .dest_sel_i(cipher_sel),
+    .dest_sel_i(dest_sel),
     .hw_key_sel_i(hw_key_sel),
     // SEC_CM: OUTPUT_KEYS.CTRL.REDUN
     .data_en_i(data_en),
@@ -542,6 +551,7 @@ module keymgr
     .aes_key_o,
     .otbn_key_o,
     .kmac_key_o,
+    .sideload_sel_err_o(sideload_sel_err),
     .fsm_err_o(sideload_fsm_err)
   );
 
@@ -615,23 +625,31 @@ module keymgr
   assign hw2reg.fault_status.cmd.de           = fault_code[FaultKmacCmd];
   assign hw2reg.fault_status.kmac_fsm.de      = fault_code[FaultKmacFsm];
   assign hw2reg.fault_status.kmac_op.de       = fault_code[FaultKmacOp];
+  assign hw2reg.fault_status.kmac_done.de     = fault_code[FaultKmacDone];
   assign hw2reg.fault_status.kmac_out.de      = fault_code[FaultKmacOut];
   assign hw2reg.fault_status.regfile_intg.de  = fault_code[FaultRegIntg];
   assign hw2reg.fault_status.shadow.de        = fault_code[FaultShadow];
   assign hw2reg.fault_status.ctrl_fsm_intg.de = fault_code[FaultCtrlFsm];
+  assign hw2reg.fault_status.ctrl_fsm_chk.de  = fault_code[FaultCtrlFsmChk];
   assign hw2reg.fault_status.ctrl_fsm_cnt.de  = fault_code[FaultCtrlCnt];
   assign hw2reg.fault_status.reseed_cnt.de    = fault_code[FaultReseedCnt];
   assign hw2reg.fault_status.side_ctrl_fsm.de = fault_code[FaultSideFsm];
+  assign hw2reg.fault_status.side_ctrl_sel.de = fault_code[FaultSideSel];
+  assign hw2reg.fault_status.key_ecc.de       = fault_code[FaultKeyEcc];
   assign hw2reg.fault_status.cmd.d            = 1'b1;
   assign hw2reg.fault_status.kmac_fsm.d       = 1'b1;
+  assign hw2reg.fault_status.kmac_done.d      = 1'b1;
   assign hw2reg.fault_status.kmac_op.d        = 1'b1;
   assign hw2reg.fault_status.kmac_out.d       = 1'b1;
   assign hw2reg.fault_status.regfile_intg.d   = 1'b1;
-  assign hw2reg.fault_status.ctrl_fsm_intg.d  = 1'b1;
   assign hw2reg.fault_status.shadow.d         = 1'b1;
+  assign hw2reg.fault_status.ctrl_fsm_intg.d  = 1'b1;
+  assign hw2reg.fault_status.ctrl_fsm_chk.d   = 1'b1;
   assign hw2reg.fault_status.ctrl_fsm_cnt.d   = 1'b1;
   assign hw2reg.fault_status.reseed_cnt.d     = 1'b1;
   assign hw2reg.fault_status.side_ctrl_fsm.d  = 1'b1;
+  assign hw2reg.fault_status.side_ctrl_sel.d  = 1'b1;
+  assign hw2reg.fault_status.key_ecc.d        = 1'b1;
 
   // There are two types of alerts
   // - alerts for hardware errors, these could not have been generated by software.
@@ -664,7 +682,7 @@ module keymgr
   assign fault_alert_test = reg2hw.alert_test.fatal_fault_err.q &
                             reg2hw.alert_test.fatal_fault_err.qe;
   prim_alert_sender #(
-    .AsyncOn(AlertAsyncOn[0]),
+    .AsyncOn(AlertAsyncOn[1]),
     .IsFatal(1)
   ) u_fault_alert (
     .clk_i,
@@ -673,15 +691,15 @@ module keymgr
     .alert_req_i(fault_err_req_q),
     .alert_ack_o(fault_err_ack),
     .alert_state_o(),
-    .alert_rx_i(alert_rx_i[0]),
-    .alert_tx_o(alert_tx_o[0])
+    .alert_rx_i(alert_rx_i[1]),
+    .alert_tx_o(alert_tx_o[1])
   );
 
   logic op_err_alert_test;
   assign op_err_alert_test = reg2hw.alert_test.recov_operation_err.q &
                              reg2hw.alert_test.recov_operation_err.qe;
   prim_alert_sender #(
-    .AsyncOn(AlertAsyncOn[1]),
+    .AsyncOn(AlertAsyncOn[0]),
     .IsFatal(0)
   ) u_op_err_alert (
     .clk_i,
@@ -690,8 +708,8 @@ module keymgr
     .alert_req_i(op_err_req_q),
     .alert_ack_o(op_err_ack),
     .alert_state_o(),
-    .alert_rx_i(alert_rx_i[1]),
-    .alert_tx_o(alert_tx_o[1])
+    .alert_rx_i(alert_rx_i[0]),
+    .alert_tx_o(alert_tx_o[0])
   );
 
   // known asserts
@@ -705,6 +723,7 @@ module keymgr
   `ASSERT_KNOWN(OtbnKeyKnownO_A, otbn_key_o)
   `ASSERT_KNOWN(KmacDataKnownO_A, kmac_data_o)
 
+
   // kmac parameter consistency
   // Both modules must be consistent with regards to masking assumptions
   logic unused_kmac_en_masking;
@@ -715,12 +734,16 @@ module keymgr
   // Ensure all parameters are consistent
   `ASSERT_INIT(FaultCntMatch_A, FaultLastPos == AsyncFaultLastIdx + SyncFaultLastIdx)
   `ASSERT_INIT(ErrCntMatch_A, ErrLastPos == AsyncErrLastIdx + SyncErrLastIdx)
+  `ASSERT_INIT(StageMatch_A, KeyMgrStages == Disable)
 
-  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(CtrlCntAlertCheck_A, u_ctrl.u_cnt, alert_tx_o[0])
-  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(KmacIfCntAlertCheck_A, u_kmac_if.u_cnt, alert_tx_o[0])
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(CtrlCntAlertCheck_A, u_ctrl.u_cnt, alert_tx_o[1])
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(KmacIfCntAlertCheck_A, u_kmac_if.u_cnt, alert_tx_o[1])
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(ReseedCtrlCntAlertCheck_A, u_reseed_ctrl.u_reseed_cnt,
-                                         alert_tx_o[0])
-  `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(CtrlMainFsmCheck_A, u_ctrl.u_state_regs, alert_tx_o[0])
-  `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(CtrlDataFsmCheck_A, u_ctrl.u_data_state_regs, alert_tx_o[0])
-  `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(KmacIfFsmCheck_A, u_kmac_if.u_state_regs, alert_tx_o[0])
+                                         alert_tx_o[1])
+  `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(CtrlMainFsmCheck_A, u_ctrl.u_state_regs, alert_tx_o[1])
+  `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(CtrlDataFsmCheck_A,
+      u_ctrl.u_data_en.u_state_regs, alert_tx_o[1])
+  `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(CtrlOpFsmCheck_A,
+      u_ctrl.u_op_state.u_state_regs, alert_tx_o[1])
+  `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(KmacIfFsmCheck_A, u_kmac_if.u_state_regs, alert_tx_o[1])
 endmodule // keymgr

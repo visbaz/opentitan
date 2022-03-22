@@ -39,6 +39,7 @@ parameter string LIST_OF_ALERTS[] = {
   "sensor_ctrl_fatal_alert",
   "sram_ctrl_ret_aon_fatal_error",
   "flash_ctrl_recov_err",
+  "flash_ctrl_fatal_std_err",
   "flash_ctrl_fatal_err",
   "rv_dm_fatal_fault",
   "rv_plic_fatal_fault",
@@ -49,8 +50,8 @@ parameter string LIST_OF_ALERTS[] = {
   "kmac_fatal_fault_err",
   "otbn_fatal",
   "otbn_recov",
-  "keymgr_fatal_fault_err",
   "keymgr_recov_operation_err",
+  "keymgr_fatal_fault_err",
   "csrng_recov_alert",
   "csrng_fatal_alert",
   "entropy_src_recov_alert",
@@ -67,4 +68,4 @@ parameter string LIST_OF_ALERTS[] = {
   "rv_core_ibex_recov_hw_err"
 };
 
-parameter uint NUM_ALERTS = 60;
+parameter uint NUM_ALERTS = 61;

@@ -59,6 +59,7 @@
   input prim_mubi_pkg::mubi4_t scanmode_i,
 
   // idle hints
+  // SEC_CM: IDLE.INTERSIG.MUBI
   input prim_mubi_pkg::mubi4_t [3:0] idle_i,
 
   // life cycle state output
@@ -78,8 +79,12 @@
   input mubi4_t all_clk_byp_ack_i,
   output mubi4_t hi_speed_sel_o,
 
-  // jittery enable
+  // jittery enable to ast
   output mubi4_t jitter_en_o,
+
+  // external indication for whether dividers should be stepped down
+  // SEC_CM: DIV.INTERSIG.MUBI
+  input mubi4_t div_step_down_req_i,
 
   // clock gated indications going to alert handlers
   output clkmgr_cg_en_t cg_en_o,
@@ -97,7 +102,6 @@
   // Divided clocks
   ////////////////////////////////////////////////////
 
-  mubi4_t step_down_req;
   logic [1:0] step_down_acks;
 
   logic clk_io_div2_i;
@@ -112,7 +116,7 @@
   ) u_io_step_down_req_sync (
     .clk_i(clk_io_i),
     .rst_ni(rst_io_ni),
-    .mubi_i(step_down_req),
+    .mubi_i(div_step_down_req_i),
     .mubi_o(io_step_down_req)
   );
 
@@ -209,21 +213,17 @@
 
   logic recov_alert;
   assign recov_alert =
-    hw2reg.recov_err_code.io_update_err.de |
     hw2reg.recov_err_code.io_measure_err.de |
     hw2reg.recov_err_code.io_timeout_err.de |
-    hw2reg.recov_err_code.io_div2_update_err.de |
     hw2reg.recov_err_code.io_div2_measure_err.de |
     hw2reg.recov_err_code.io_div2_timeout_err.de |
-    hw2reg.recov_err_code.io_div4_update_err.de |
     hw2reg.recov_err_code.io_div4_measure_err.de |
     hw2reg.recov_err_code.io_div4_timeout_err.de |
-    hw2reg.recov_err_code.main_update_err.de |
     hw2reg.recov_err_code.main_measure_err.de |
     hw2reg.recov_err_code.main_timeout_err.de |
-    hw2reg.recov_err_code.usb_update_err.de |
     hw2reg.recov_err_code.usb_measure_err.de |
-    hw2reg.recov_err_code.usb_timeout_err.de;
+    hw2reg.recov_err_code.usb_timeout_err.de |
+    hw2reg.recov_err_code.shadow_update_err.de;
 
   assign alerts = {
     |reg2hw.fatal_err_code,
@@ -261,14 +261,15 @@
     .lc_clk_byp_req_i,
     .lc_clk_byp_ack_o,
     .byp_req_i(mubi4_t'(reg2hw.extclk_ctrl.sel.q)),
+    .hi_speed_sel_i(mubi4_t'(reg2hw.extclk_ctrl.hi_speed_sel.q)),
     .all_clk_byp_req_o,
     .all_clk_byp_ack_i,
     .io_clk_byp_req_o,
     .io_clk_byp_ack_i,
+    .hi_speed_sel_o,
 
     // divider step down controls
-    .step_down_acks_i(step_down_acks),
-    .step_down_req_o(step_down_req)
+    .step_down_acks_i(step_down_acks)
   );
 
   ////////////////////////////////////////////////////
@@ -476,6 +477,13 @@
   // SEC_CM: TIMEOUT.CLK.BKGN_CHK, MEAS.CLK.BKGN_CHK
   ////////////////////////////////////////////////////
 
+  logic [4:0] shadow_update_errs;
+  logic [4:0] shadow_storage_errs;
+  assign hw2reg.recov_err_code.shadow_update_err.d = 1'b1;
+  assign hw2reg.recov_err_code.shadow_update_err.de = |shadow_update_errs;
+  assign hw2reg.fatal_err_code.shadow_storage_err.d = 1'b1;
+  assign hw2reg.fatal_err_code.shadow_storage_err.de = |shadow_storage_errs;
+
   logic io_fast_err;
   logic io_slow_err;
   logic io_timeout_err;
@@ -527,13 +535,11 @@
   assign hw2reg.recov_err_code.io_measure_err.de = synced_io_err;
   assign hw2reg.recov_err_code.io_timeout_err.d = 1'b1;
   assign hw2reg.recov_err_code.io_timeout_err.de = synced_io_timeout_err;
-  assign hw2reg.recov_err_code.io_update_err.d = 1'b1;
-  assign hw2reg.recov_err_code.io_update_err.de =
+  assign shadow_update_errs[0] =
     reg2hw.io_meas_ctrl_shadowed.en.err_update |
     reg2hw.io_meas_ctrl_shadowed.hi.err_update |
     reg2hw.io_meas_ctrl_shadowed.lo.err_update;
-  assign hw2reg.fatal_err_code.io_storage_err.d = 1'b1;
-  assign hw2reg.fatal_err_code.io_storage_err.de =
+  assign shadow_storage_errs[0] =
     reg2hw.io_meas_ctrl_shadowed.en.err_storage |
     reg2hw.io_meas_ctrl_shadowed.hi.err_storage |
     reg2hw.io_meas_ctrl_shadowed.lo.err_storage;
@@ -589,13 +595,11 @@
   assign hw2reg.recov_err_code.io_div2_measure_err.de = synced_io_div2_err;
   assign hw2reg.recov_err_code.io_div2_timeout_err.d = 1'b1;
   assign hw2reg.recov_err_code.io_div2_timeout_err.de = synced_io_div2_timeout_err;
-  assign hw2reg.recov_err_code.io_div2_update_err.d = 1'b1;
-  assign hw2reg.recov_err_code.io_div2_update_err.de =
+  assign shadow_update_errs[1] =
     reg2hw.io_div2_meas_ctrl_shadowed.en.err_update |
     reg2hw.io_div2_meas_ctrl_shadowed.hi.err_update |
     reg2hw.io_div2_meas_ctrl_shadowed.lo.err_update;
-  assign hw2reg.fatal_err_code.io_div2_storage_err.d = 1'b1;
-  assign hw2reg.fatal_err_code.io_div2_storage_err.de =
+  assign shadow_storage_errs[1] =
     reg2hw.io_div2_meas_ctrl_shadowed.en.err_storage |
     reg2hw.io_div2_meas_ctrl_shadowed.hi.err_storage |
     reg2hw.io_div2_meas_ctrl_shadowed.lo.err_storage;
@@ -651,13 +655,11 @@
   assign hw2reg.recov_err_code.io_div4_measure_err.de = synced_io_div4_err;
   assign hw2reg.recov_err_code.io_div4_timeout_err.d = 1'b1;
   assign hw2reg.recov_err_code.io_div4_timeout_err.de = synced_io_div4_timeout_err;
-  assign hw2reg.recov_err_code.io_div4_update_err.d = 1'b1;
-  assign hw2reg.recov_err_code.io_div4_update_err.de =
+  assign shadow_update_errs[2] =
     reg2hw.io_div4_meas_ctrl_shadowed.en.err_update |
     reg2hw.io_div4_meas_ctrl_shadowed.hi.err_update |
     reg2hw.io_div4_meas_ctrl_shadowed.lo.err_update;
-  assign hw2reg.fatal_err_code.io_div4_storage_err.d = 1'b1;
-  assign hw2reg.fatal_err_code.io_div4_storage_err.de =
+  assign shadow_storage_errs[2] =
     reg2hw.io_div4_meas_ctrl_shadowed.en.err_storage |
     reg2hw.io_div4_meas_ctrl_shadowed.hi.err_storage |
     reg2hw.io_div4_meas_ctrl_shadowed.lo.err_storage;
@@ -713,13 +715,11 @@
   assign hw2reg.recov_err_code.main_measure_err.de = synced_main_err;
   assign hw2reg.recov_err_code.main_timeout_err.d = 1'b1;
   assign hw2reg.recov_err_code.main_timeout_err.de = synced_main_timeout_err;
-  assign hw2reg.recov_err_code.main_update_err.d = 1'b1;
-  assign hw2reg.recov_err_code.main_update_err.de =
+  assign shadow_update_errs[3] =
     reg2hw.main_meas_ctrl_shadowed.en.err_update |
     reg2hw.main_meas_ctrl_shadowed.hi.err_update |
     reg2hw.main_meas_ctrl_shadowed.lo.err_update;
-  assign hw2reg.fatal_err_code.main_storage_err.d = 1'b1;
-  assign hw2reg.fatal_err_code.main_storage_err.de =
+  assign shadow_storage_errs[3] =
     reg2hw.main_meas_ctrl_shadowed.en.err_storage |
     reg2hw.main_meas_ctrl_shadowed.hi.err_storage |
     reg2hw.main_meas_ctrl_shadowed.lo.err_storage;
@@ -775,13 +775,11 @@
   assign hw2reg.recov_err_code.usb_measure_err.de = synced_usb_err;
   assign hw2reg.recov_err_code.usb_timeout_err.d = 1'b1;
   assign hw2reg.recov_err_code.usb_timeout_err.de = synced_usb_timeout_err;
-  assign hw2reg.recov_err_code.usb_update_err.d = 1'b1;
-  assign hw2reg.recov_err_code.usb_update_err.de =
+  assign shadow_update_errs[4] =
     reg2hw.usb_meas_ctrl_shadowed.en.err_update |
     reg2hw.usb_meas_ctrl_shadowed.hi.err_update |
     reg2hw.usb_meas_ctrl_shadowed.lo.err_update;
-  assign hw2reg.fatal_err_code.usb_storage_err.d = 1'b1;
-  assign hw2reg.fatal_err_code.usb_storage_err.de =
+  assign shadow_storage_errs[4] =
     reg2hw.usb_meas_ctrl_shadowed.en.err_storage |
     reg2hw.usb_meas_ctrl_shadowed.hi.err_storage |
     reg2hw.usb_meas_ctrl_shadowed.lo.err_storage;
@@ -1155,9 +1153,6 @@
 
   // SEC_CM: JITTER.CONFIG.MUBI
   assign jitter_en_o = mubi4_t'(reg2hw.jitter_enable.q);
-
-
-  assign hi_speed_sel_o = mubi4_t'(reg2hw.extclk_ctrl.hi_speed_sel.q);
 
   ////////////////////////////////////////////////////
   // Exported clocks

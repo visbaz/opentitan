@@ -13,16 +13,15 @@
 
 module otbn_core_model
   import otbn_pkg::*;
-  import otbn_model_pkg::*;
   import edn_pkg::*;
   import keymgr_pkg::otbn_key_req_t;
 #(
   // The scope that contains the instruction and data memory (for DPI)
   parameter string MemScope = "",
 
-  // Scope of an RTL OTBN implementation (for DPI). If empty, this is a "standalone" model, which
-  // should update DMEM on completion. If not empty, we assume it's the scope for the top-level of a
-  // real implementation running alongside and we check DMEM contents on completion.
+  // Scope of an RTL OTBN implementation (for DPI). This should be give the scope for the top-level
+  // of a real implementation running alongside. We will use it to check DMEM and register file
+  // contents on completion of an operation.
   parameter string DesignScope = "",
 
   // Enable internal secure wipe
@@ -57,6 +56,8 @@ module otbn_core_model
   output bit             err_o // something went wrong
 );
 
+`include "otbn_model_dpi.svh"
+
   // Create and destroy an object through which we can talk to the ISS.
   chandle model_handle;
   initial begin
@@ -87,7 +88,7 @@ module otbn_core_model
   bit [31:0] raw_err_bits_d, raw_err_bits_q;
   bit [31:0] stop_pc_d, stop_pc_q;
   bit        rnd_req_start_d, rnd_req_start_q;
-  bit        failed_lc_escalate;
+  bit        failed_lc_escalate, failed_keymgr_value;
 
   bit unused_raw_err_bits;
   logic unused_edn_rsp_fips;
@@ -153,20 +154,16 @@ module otbn_core_model
   // exactly two cycles of delay (this is a synchroniser, not a CDC, so its behaviour is easy to
   // predict). Model that delay in the SystemVerilog here, since it's much easier than handling it
   // in the Python.
-  //
-  // We actually do another hack here, where we only delay by one cycle. This is because the easiest
-  // way to make the escalation signal work is to apply it at the *end* of the Python cycle, which
-  // means we gain an extra cycle of delay on the Python side.
-  logic [1:0] escalate_fifo;
+  logic [2:0] escalate_fifo;
   logic       new_escalation;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       escalate_fifo <= '0;
     end else begin
-      escalate_fifo <= {escalate_fifo[0], lc_escalate_en_i};
+      escalate_fifo <= {escalate_fifo[1:0], lc_escalate_en_i};
     end
   end
-  assign new_escalation = escalate_fifo[0] & ~escalate_fifo[1];
+  assign new_escalation = escalate_fifo[1] & ~escalate_fifo[2];
 
   // A "busy" counter. We'd like to avoid stepping the Python process on every cycle when there's
   // nothing going on (since it's rather expensive). But exactly modelling *when* we can safely
@@ -215,8 +212,10 @@ module otbn_core_model
         failed_lc_escalate <= (otbn_model_send_lc_escalation(model_handle) != 0);
       end
       if (!$stable(keymgr_key_i) || $rose(rst_ni)) begin
-        otbn_model_set_keymgr_value(model_handle, keymgr_key_i.key[0], keymgr_key_i.key[1],
-                                    keymgr_key_i.valid);
+        failed_keymgr_value <= (otbn_model_set_keymgr_value(model_handle,
+                                                            keymgr_key_i.key[0],
+                                                            keymgr_key_i.key[1],
+                                                            keymgr_key_i.valid) != 0);
       end
       if (edn_urnd_cdc_done_i) begin
         edn_model_urnd_cdc_done(model_handle);
@@ -269,36 +268,33 @@ module otbn_core_model
   assign status_o = status_q;
   assign insn_cnt_o = insn_cnt_q;
 
-  // If DesignScope is not empty, we have a design to check. Bind a copy of otbn_rf_snooper_if into
-  // each register file. The otbn_model_check() function will use these to extract memory contents.
-  if (DesignScope != "") begin: g_check_design
-    // TODO: This bind is by module, rather than by instance, because I couldn't get the by-instance
-    // syntax plus upwards name referencing to work with Verilator. Obviously, this won't work with
-    // multiple OTBN instances, so it would be nice to get it right.
-    bind otbn_rf_base_ff otbn_rf_snooper_if #(
-      .Width           (BaseIntgWidth),
-      .Depth           (NGpr),
-      .IntegrityEnabled(1)
-    ) u_snooper (
-      .rf (rf_reg)
+  // TODO: This bind is by module, rather than by instance, because I couldn't get the by-instance
+  // syntax plus upwards name referencing to work with Verilator. Obviously, this won't work with
+  // multiple OTBN instances, so it would be nice to get it right.
+  bind otbn_rf_base_ff otbn_rf_snooper_if #(
+    .Width           (BaseIntgWidth),
+    .Depth           (NGpr),
+    .IntegrityEnabled(1)
+  ) u_snooper (
+    .rf (rf_reg)
+  );
+
+  bind otbn_rf_bignum_ff otbn_rf_snooper_if #(
+    .Width           (ExtWLEN),
+    .Depth           (NWdr),
+    .IntegrityEnabled(1)
+  ) u_snooper (
+    .rf (rf)
+  );
+
+  bind otbn_rf_base otbn_stack_snooper_if #(.StackIntgWidth(39), .StackWidth(32), .StackDepth(8))
+    u_call_stack_snooper (
+      .stack_storage(u_call_stack.stack_storage),
+      .stack_wr_ptr_q(u_call_stack.stack_wr_ptr_q)
     );
 
-    bind otbn_rf_bignum_ff otbn_rf_snooper_if #(
-      .Width           (ExtWLEN),
-      .Depth           (NWdr),
-      .IntegrityEnabled(1)
-    ) u_snooper (
-      .rf (rf)
-    );
-
-    bind otbn_rf_base otbn_stack_snooper_if #(.StackIntgWidth(39), .StackWidth(32), .StackDepth(8))
-      u_call_stack_snooper (
-        .stack_storage(u_call_stack.stack_storage),
-        .stack_wr_ptr_q(u_call_stack.stack_wr_ptr_q)
-      );
-  end
-
-  assign err_o = failed_step | failed_check | check_mismatch_q | failed_lc_escalate;
+  assign err_o = |{failed_step, failed_check, check_mismatch_q,
+                   failed_lc_escalate, failed_keymgr_value};
 
   // Derive a "done" signal. This should trigger for a single cycle when OTBN finishes its work.
   // It's analogous to the done_o signal on otbn_core, but this signal is delayed by a single cycle

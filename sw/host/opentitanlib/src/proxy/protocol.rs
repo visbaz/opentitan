@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
+use crate::io::emu::{EmuState, EmuValue};
 use crate::io::gpio::{PinMode, PullMode};
 use crate::io::spi::TransferMode;
-use crate::transport::TransportError;
+use crate::transport::{Capabilities, TransportError};
 use crate::util::voltage::Voltage;
 
 #[derive(Serialize, Deserialize)]
@@ -17,18 +19,22 @@ pub enum Message {
 
 #[derive(Serialize, Deserialize)]
 pub enum Request {
+    GetCapabilities,
     Gpio { id: String, command: GpioRequest },
     Uart { id: String, command: UartRequest },
     Spi { id: String, command: SpiRequest },
     I2c { id: String, command: I2cRequest },
+    Emu { command: EmuRequest },
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum Response {
+    GetCapabilities(Capabilities),
     Gpio(GpioResponse),
     Uart(UartResponse),
     Spi(SpiResponse),
     I2c(I2cResponse),
+    Emu(EmuResponse),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -159,4 +165,20 @@ pub enum I2cResponse {
     RunTransaction {
         transaction: Vec<I2cTransferResponse>,
     },
+}
+#[derive(Serialize, Deserialize)]
+pub enum EmuRequest {
+    GetState,
+    Start {
+        factory_reset: bool,
+        args: HashMap<String, EmuValue>,
+    },
+    Stop,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum EmuResponse {
+    GetState { state: EmuState },
+    Start,
+    Stop,
 }

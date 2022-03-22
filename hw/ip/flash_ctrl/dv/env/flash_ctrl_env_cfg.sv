@@ -24,6 +24,15 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
   // Knob for blocking host reads
   bit block_host_rd = 1;
 
+  // Knob for scoreboard write and check on reads
+  bit scb_check = 0;
+
+  // Knob for scoreboard set expected alert
+  bit scb_set_exp_alert = 0;
+
+  // Max delay for alerts in clocks
+  uint alert_max_delay;
+
   // read data by host if
   data_q_t flash_rd_data;
 
@@ -49,7 +58,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
     super.initialize(csr_base_addr);
 
     shadow_update_err_status_fields[ral.err_code.update_err] = 1;
-    shadow_storage_err_status_fields[ral.fault_status.storage_err] = 1;
+    shadow_storage_err_status_fields[ral.std_fault_status.storage_err] = 1;
 
     // create the seq_cfg and call configure
     seq_cfg = flash_ctrl_seq_cfg::type_id::create("seq_cfg");
@@ -63,6 +72,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
       end
     end
 
+    alert_max_delay = 20000;
     `uvm_info(`gfn, $sformatf("ral_model_names: %0p", ral_model_names), UVM_LOW)
   endfunction : initialize
 
@@ -137,7 +147,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
     for (int i = 0; i < flash_op.num_words; i++) begin
       data[i] = mem_bkdr_util_h[flash_op.partition][addr_attrs.bank].read32(read_addr);
       `uvm_info(`gfn, $sformatf(
-                "flash_mem_bkdr_read: partition = %s , {%s} = 0x%0h",
+                "flash_mem_bkdr_read: partition = %s, {%s} = 0x%0h",
                 flash_op.partition.name(),
                 addr_attrs.sprint(),
                 data[i]
@@ -185,7 +195,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
       _flash_full_write(flash_op.partition, addr_attrs.bank, addr_attrs.bank_addr, loc_data);
 
       `uvm_info(`gfn, $sformatf(
-                "flash_mem_bkdr_write: partition = %s , {%s} = 0x%0h",
+                "flash_mem_bkdr_write: partition = %s, {%s} = 0x%0h",
                 flash_op.partition.name(),
                 addr_attrs.sprint(),
                 loc_data
@@ -311,7 +321,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
     `uvm_info(`gfn, $sformatf(
               {
                 "flash_mem_bkdr_erase_check: Erase type = %s, bank = %0d, ",
-                "partition = %s , %snum_words = %0d"
+                "partition = %s, %snum_words = %0d"
               },
               flash_op.erase_type.name(),
               addr_attrs.bank,
@@ -326,7 +336,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
       `uvm_info(`gfn, $sformatf(
                 {
                   "flash_mem_bkdr_erase_check: Erase type = %s, bank: %0d, ",
-                  "partition: %s , %saddr: 0x%0h, data: 0x%0h"
+                  "partition: %s, %saddr: 0x%0h, data: 0x%0h"
                 },
                 flash_op.erase_type.name(),
                 addr_attrs.bank,

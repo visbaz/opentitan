@@ -10,7 +10,8 @@
                      // "hw/dv/tools/dvsim/testplans/mem_testplan.hjson",
                      "hw/dv/tools/dvsim/testplans/tl_device_access_types_testplan.hjson",
                      "hw/ip/tlul/data/tlul_testplan.hjson",
-                     "sw/device/silicon_creator/mask_rom/e2e_tests/mask_rom_e2e_testplan.hjson"]
+                     "sw/device/silicon_creator/mask_rom/data/mask_rom_testplan.hjson",
+                     "hw/top_earlgrey/data/chip_conn_testplan.hjson"]
 
   testpoints: [
     ///////////////////////////////////////////////////////////////////////////
@@ -679,7 +680,7 @@
             - Stop the escalation process and fail the test in the interrupt handler in case the
               bark interrupt is fired.
             - Program the alert handler to escalate on alerts upto phase 2 (i.e. reset) but the
-              phase 1 (i.e. wipe secrets) should occur and last during the time the wdog is 
+              phase 1 (i.e. wipe secrets) should occur and last during the time the wdog is
               programed to bark and bite.
             - Trigger an alert to cause an escalation condition before the bark signal asserts.
             - After the reset ensure that the reset cause was due to the escalation to prove that
@@ -772,7 +773,7 @@
 
     // CLKMGR tests:
     {
-      name: chip_sw_clk_idle_trans
+      name: chip_sw_clkmgr_idle_trans
       desc: '''Verify the ability to turn off the transactional clock via SW.
 
             Ensure that the clock to transactional units can be turned off regardless of any
@@ -783,7 +784,7 @@
       tests: []
     }
     {
-      name: chip_sw_clk_off_trans
+      name: chip_sw_clkmgr_off_trans
       desc: '''Verify the turned off transactional units.
 
             Verify CSR accesses do not complete in units that are off.  Using the watchdog timers,
@@ -798,7 +799,7 @@
       tests: []
     }
     {
-      name: chip_sw_clk_off_peri
+      name: chip_sw_clkmgr_off_peri
       desc: '''Verify the ability to turn off the peripheral clock via SW.
 
             Verify CSR accesses do not complete in peripherals that are off.  Using the watchdog
@@ -806,20 +807,18 @@
             watchdog event results, and verify the rstmgr crash dump info records the CSR address.
             '''
       milestone: V2
-      tests: ["chip_sw_clkmgr_peri_off"]
+      tests: ["chip_sw_clkmgr_off_peri"]
     }
     {
-      name: chip_conn_clk_div
+      name: chip_conn_clkmgr_div
       desc: '''Verify clk division logic is working correctly.
 
-            This can be easily verified if we implement clock cycle counters.
             The IP level checks the divided clocks via SVA, and these are also bound at chip level.
-
-            Add formal connectivity tests to check peripherals are connected to the clock they
-            expect.
+            Connectivity tests check peripherals are connected to the clock they expect.
+            Use the clkmgr count measurement feature to verify clock division.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_clkmgr_external_clk_src_for_sw"]
       tags: ["conn"]
     }
     {
@@ -839,23 +838,22 @@
 
             In RMA and TEST_UNLOCKED lc states the external clock is enabled in response to
             `extclk_ctrl.sel` CSR writes. In addition `extclk_ctrl.step_down` CSR causes the divided
-            clocks to step down. It may be best to verify this via SVA, unless we implement clock
-            cycle counters. X-ref with chip_sw_uart_tx_rx_alt_clk_freq, which needs to deal with
-            this as well.
+            clocks to step down. Verify this via SVA bound to clkmgr, and clock cycle counters.
+            X-ref with chip_sw_uart_tx_rx_alt_clk_freq, which needs to deal with this as well.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_clkmgr_external_clk_src_for_sw"]
     }
     {
-      name: chip_sw_clkmgr_jitter_enable
-      desc: '''Verify the chip operates correctly when clock jitter is enabled.
+      name: chip_sw_clkmgr_jitter
+      desc: '''Verify the clock jitter functionality.
 
-            Enable main clock jitter setting the clkmgr `jitter_enable` CSR high. This causes the
+            Enable clock jitter setting the clkmgr `jitter_enable` CSR high. This causes the
             jitter_o clkmgr output to toggle. Verify this output is connected to AST's
             clk_src_sys_jen_i input using formal.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_clkmgr_jitter"]
     }
 
     // PWRMGR tests:
@@ -1626,7 +1624,7 @@
             the HMAC done and FIFO empty interrupts as a part of this test.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_hmac_enc_irq", "chip_sw_hmac_enc"]
     }
     {
       name: chip_sw_hmac_idle
@@ -1654,7 +1652,7 @@
             the NIST vectors). SW validates the reception of kmac done and fifo empty interrupts.
             '''
       milestone: V2
-      tests: ["chip_sw_kmac_mode_cshake_test", "chip_sw_kmac_mode_kmac_test"]
+      tests: ["chip_sw_kmac_mode_cshake", "chip_sw_kmac_mode_kmac"]
     }
     {
       name: chip_sw_kmac_app_keymgr
@@ -1698,7 +1696,7 @@
             X-ref'ed with ROM_CTRL test/env.
             '''
       milestone: V2
-      tests: ["chip_sw_kmac_app_rom_test"]
+      tests: ["chip_sw_kmac_app_rom"]
     }
     {
       name: chip_sw_kmac_entropy
@@ -1735,7 +1733,7 @@
               Verify that the KMAC clk enabled status reads as disabled (KMAC is idle).
             '''
       milestone: V2
-      tests: ["chip_sw_kmac_idle_test"]
+      tests: ["chip_sw_kmac_idle"]
     }
 
     // ENTROPY_SRC (pre-verified IP) integration tests:
@@ -1970,17 +1968,17 @@
       name: chip_sw_otbn_idle
       desc: '''Verify the OTBN idle signal to clkmgr.
 
-            - Write the OTBN clk hint to 1 within clkmgr to indicate OTBN clk is ready to be gated.
-              Verify that the OTBN clk hint status within clkmgr reads 0 (OTBN is idle).
-            - Start an OTBN operation.
-              Verify that the OTBN clk hint status within clkmgr now reads 1 (OTBN is not idle),
-              before the operation is complete.
-            - After the OTBN operation is complete, check the output for correctness.
-              Verify that the OTBN clk hint status within clkmgr now reads 0 again (OTBN is idle),
-              after the operation is complete.
+            - Write the OTBN clk hint to 0 within clkmgr to indicate OTBN clk can be gated
+              and verify that the OTBN clk hint status within clkmgr reads 0 (OTBN is idle).
+            - Write the OTBN clk hint to 1 within clkmgr to indicate OTBN clk can be enabled.
+            - Start an OTBN operation, write the OTBN clk hint to 0 within clkmgr and verify that
+              the OTBN clk hint status within clkmgr reads 1 (OTBN is not idle).
+            - After the OTBN operation is complete, verify that the OTBN clk hint status within 
+              clkmgr now reads 0 again (OTBN is idle). 
+            - Write the OTBN clk hint to 1, read and check the OTBN output for correctness.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_otbn_randomness"]
     }
     {
       name: chip_conn_otbn_ast_ram_cfg
@@ -2018,7 +2016,7 @@
             - Verify that the CPU can fetch instructions from the ROM.
             '''
       milestone: V2
-      tests: ["chip_sw_rom_ctrl_integrity_check_test"]
+      tests: ["chip_sw_rom_ctrl_integrity_check"]
     }
     {
       name: chip_conn_rom_ctrl_ast_rom_cfg
@@ -2040,24 +2038,7 @@
               digest does not match the top 8 words of the ROM.
             '''
       milestone: V2
-      tests: ["chip_sw_rom_ctrl_integrity_check_test"]
-    }
-    {
-      name: chip_sw_rom_ctrl_reset_glitch
-      desc: '''Verify that a glitch on the ROM ctrl's reset input is triggered as a fatal alert.
-
-            - In normal boot up from POR, the ROM contents are checked for validity using KMAC.
-            - After boot up, read the reset cause register in rstmgr to confirm POR reset phase.
-            - SW goes into idle state (nothing to do).
-            - The testbench randomly glitches the ROM ctrl's reset input, which causes ROM ctrl to
-              re-check the contents for validity.
-            - Verify that the KMAC detects the repeat presentation of data from ROM ctrl as a fatal
-              alert and the chip is rebooted via the alert escalation path.
-            - After boot up, read the reset cause register in rstmgr to confirm reset due to alert
-              phase.
-            '''
-      milestone: V2
-      tests: []
+      tests: ["chip_sw_rom_ctrl_integrity_check"]
     }
 
     // SRAM (pre-verified IP) integration tests:
@@ -2359,10 +2340,10 @@
             - Initiate flash program or erase over the controller.
             - Program the pwrmgr to go into deep sleep.
             - Issue a WFI.
-            - Ensure that the low power entry is gated until the flash operation completes.
+            - Ensure that the low power entry does not happen due to the ongoing flash operation.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_flash_ctrl_idle_low_power"]
     }
     {
       name: chip_sw_flash_keymgr_seeds
@@ -2383,7 +2364,7 @@
               accessibility of the corresponding partition depending on the signal value.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_flash_ctrl_lc_rw_en"]
     }
     {
       name: chip_sw_flash_creator_seed_wipe_on_rma
@@ -2402,7 +2383,7 @@
               accessibility of the corresponding partition depending on the signal value.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_flash_ctrl_lc_rw_en"]
     }
     {
       name: chip_sw_flash_lc_iso_part_sw_rd_en
@@ -2413,7 +2394,7 @@
               accessibility of the corresponding partition depending on the signal value.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_flash_ctrl_lc_rw_en"]
     }
     {
       name: chip_sw_flash_lc_iso_part_sw_wr_en
@@ -2424,7 +2405,7 @@
               accessibility of the corresponding partition depending on the signal value.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_flash_ctrl_lc_rw_en"]
     }
     {
       name: chip_sw_flash_lc_seed_hw_rd_en
@@ -2436,7 +2417,7 @@
               keymgr.
             '''
       milestone: V2
-      tests: []
+      tests: ["chip_sw_flash_ctrl_lc_rw_en"]
     }
     {
       name: chip_sw_flash_lc_escalate_en
@@ -2650,11 +2631,23 @@
       tests: []
    }
 
-
     ////////////////////////////
     // System level scenarios //
     ////////////////////////////
+    {
+      name: chip_sw_example_test_from_rom_or_flash
+      desc: '''Run examples tests developed for each boot stage.
 
+            Our test infrastructure defaults to running tests out flash, at the
+            ROM_EXT stage, but also supports running tests in the ROM stage. We
+            develop example tests to demonstrate these capabilities, and need to
+            run them in DV to ensure the integrity of our infrastructure.
+            '''
+      milestone: V1
+      tests: ["chip_sw_example_flash",
+              "chip_sw_example_rom",
+              ]
+    }
     {
       name: chip_sw_smoketest
       desc: '''Run smoke tests developed for each IP.
@@ -2667,10 +2660,8 @@
       tests: ["chip_sw_aes_smoketest",
               "chip_sw_aon_timer_smoketest",
               "chip_sw_clkmgr_smoketest",
-              // TODO(lowrisc/opentitan#7505): Debug CSRNG generate bits mismatch.
-              // "chip_sw_csrng_smoketest",
-              // TODO(lowrisc/opentitan#10092): Remove dependency on uncontrolled environment.
-              // "chip_sw_entropy_src_smoketest",
+              "chip_sw_csrng_smoketest",
+              "chip_sw_entropy_src_smoketest",
               "chip_sw_gpio_smoketest",
               "chip_sw_hmac_smoketest",
               "chip_sw_kmac_smoketest",
@@ -2683,6 +2674,18 @@
               "chip_sw_sram_ctrl_smoketest",
               "chip_sw_uart_smoketest",
             ]
+    }
+    {
+      name: chip_sw_signed
+      desc: '''Run some chip-level tests with mask ROM.
+
+            In addition to mask ROM E2E tests, we select at least one (or a few)
+            tests defined in this file to sign, and run via mask ROM instead of
+            test ROM. We need to ensure our test infrastructure and mask ROM can
+            boot and run one (or a few) of the same tests our test ROM can.
+            '''
+      milestone: V2
+      tests: ["chip_sw_uart_smoketest_signed"]
     }
     {
       name: chip_sw_coremark

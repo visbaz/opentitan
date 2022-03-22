@@ -24,7 +24,6 @@ class chip_sw_base_vseq extends chip_base_vseq;
      int size_bytes;
      int total_bytes;
 
-
     `uvm_info(`gfn, "Started cpu_init", UVM_MEDIUM)
     // TODO: Fixing this for now - need to find a way to pass this on to the SW test.
     foreach (cfg.m_uart_agent_cfgs[i]) begin
@@ -67,20 +66,18 @@ class chip_sw_base_vseq extends chip_base_vseq;
     cfg.mem_bkdr_util_h[Rom].load_mem_from_file({cfg.sw_images[SwTypeRom], ".scr.39.vmem"});
 
     // TODO: the location of the main execution image should be randomized to either bank in future.
-    if (cfg.use_spi_load_bootstrap) begin
-      `uvm_info(`gfn, "Initializing SPI flash bootstrap", UVM_MEDIUM)
-      spi_device_load_bootstrap({cfg.sw_images[SwTypeTest], ".frames.vmem"});
-    end else begin
-      cfg.mem_bkdr_util_h[FlashBank0Data].load_mem_from_file(
-          {cfg.sw_images[SwTypeTest], ".64.scr.vmem"});
+    if (cfg.sw_images.exists(SwTypeTest)) begin
+      if (cfg.use_spi_load_bootstrap) begin
+        `uvm_info(`gfn, "Initializing SPI flash bootstrap", UVM_MEDIUM)
+        spi_device_load_bootstrap({cfg.sw_images[SwTypeTest], ".frames.vmem"});
+      end else begin
+        cfg.mem_bkdr_util_h[FlashBank0Data].load_mem_from_file(
+            {cfg.sw_images[SwTypeTest], ".64.scr.vmem"});
+      end
     end
     cfg.sw_test_status_vif.sw_test_status = SwTestStatusBooted;
 
     `uvm_info(`gfn, "CPU_init done", UVM_MEDIUM)
-    // If we load the mem with a file in the same time step as overwriting a symbol in the
-    // ELF file, then adding zero delay helps with avoiding a race condition. Do all symbol
-    // overrides after this zero delay.
-    #0;
   endtask
 
   virtual function void main_sram_bkdr_write32(

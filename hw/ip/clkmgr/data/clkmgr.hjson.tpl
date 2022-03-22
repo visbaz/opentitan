@@ -110,6 +110,13 @@
       package: "prim_mubi_pkg",
     },
 
+    { struct:  "mubi4",
+      type:    "uni",
+      name:    "div_step_down_req",
+      act:     "rcv",
+      package: "prim_mubi_pkg",
+    },
+
     { struct:  "lc_tx",
       type:    "uni",
       name:    "lc_clk_byp_req",
@@ -166,6 +173,9 @@
     { name: "MEAS.CLK.BKGN_CHK",
       desc: "Background check for clock frequency."
     },
+    { name: "IDLE.INTERSIG.MUBI",
+      desc: "Idle inputs are multibit encoded."
+    }
     { name: "LC_CTRL.INTERSIG.MUBI",
       desc: "The life cycle control signals are multibit encoded."
     }
@@ -175,8 +185,14 @@
     { name: "CLK_HANDSHAKE.INTERSIG.MUBI",
       desc: "The external clock req/ack signals are multibit encoded."
     }
+    { name: "DIV.INTERSIG.MUBI",
+      desc: "Divider step down request is multibit encoded."
+    }
     { name: "JITTER.CONFIG.MUBI",
       desc: "The jitter enable configuration is multibit encoded."
+    }
+    { name: "IDLE.CTR.REDUN",
+      desc: "Idle counter is duplicated."
     }
     { name: "MEAS.CONFIG.REGWEN",
       desc: "The measurement controls protected with regwen."
@@ -235,11 +251,22 @@
           name: "HI_SPEED_SEL",
           mubi: true,
           desc: '''
-            A value of kMultiBitBool4True selects nominal speed external clocks.
+            A value of kMultiBitBool4True selects nominal speed external clock.
             All other values selects low speed clocks.
 
             Note this field only has an effect when the !!EXTCLK_CTRL.SEL field is set to
             kMultiBitBool4True.
+
+            Nominal speed means the external clock is approximately the same frequency as
+            the internal oscillator source.  When this option is used, all clocks operate
+            at roughly the nominal frequency.
+
+            Low speed means the external clock is approximately half the frequency of the
+            internal oscillator source. When this option is used, the internal dividers are
+            stepped down.  As a result, previously undivided clocks now run at half frequency,
+            while previously divided clocks run at roughly the nominal frequency.
+
+            See external clock switch support in documentation for more details.
           '''
           resval: false
         }
@@ -258,7 +285,7 @@
           name: "EN",
           resval: "1"
           desc: '''
-            When 1, the value of !!JITTER_ENALBE can be changed.  When 0, writes have no
+            When 1, the value of !!JITTER_ENABLE can be changed.  When 0, writes have no
             effect.
           '''
         },
@@ -447,9 +474,16 @@
       swaccess: "rw1c",
       hwaccess: "hwo",
       fields: [
+        { bits: "0",
+          name: "SHADOW_UPDATE_ERR",
+          resval: 0
+          desc: '''
+            One of the shadow registers encountered an update error.
+          '''
+        },
 % for src in typed_clocks.rg_srcs:
         {
-          bits: "${loop.index}",
+          bits: "${loop.index+1}",
           name: "${src.upper()}_MEASURE_ERR",
           resval: 0,
           desc: '''
@@ -459,21 +493,11 @@
 % endfor
 % for src in typed_clocks.rg_srcs:
         {
-          bits: "${loop.index + len(typed_clocks.rg_srcs)}",
+          bits: "${loop.index + len(typed_clocks.rg_srcs)+1}",
           name: "${src.upper()}_TIMEOUT_ERR",
           resval: 0,
           desc: '''
             ${src} has timed out.
-          '''
-        }
-% endfor
-% for src in typed_clocks.rg_srcs:
-        {
-          bits: "${loop.index + 2*len(typed_clocks.rg_srcs)}",
-          name: "${src.upper()}_UPDATE_ERR",
-          resval: 0,
-          desc: '''
-            !!${src.upper()}_MEASURE_CTRL_SHADOWED has an update error.
           '''
         }
 % endfor
@@ -499,16 +523,13 @@
             One of the idle counts encountered a duplicate error.
           '''
         },
-% for src in typed_clocks.rg_srcs:
-        {
-          bits: "${loop.index + 2}",
-          name: "${src.upper()}_STORAGE_ERR",
-          resval: 0,
+        { bits: "2",
+          name: "SHADOW_STORAGE_ERR",
+          resval: 0
           desc: '''
-            !!${src.upper()}_MEASURE_CTRL_SHADOWED has a storage error.
+            One of the shadow registers encountered a storage error.
           '''
         },
-% endfor
       ]
     },
   ]

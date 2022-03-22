@@ -467,6 +467,16 @@ jobs:
     parameters:
       includePatterns:
         - "/hw/***"
+  - ${{ if eq(variables['Build.SourceBranchName'], 'master') }}:
+    - template: ci/gcp-upload-template.yml
+      parameters:
+        parentDir: "$BIN_DIR/hw/top_earlgrey"
+        includeFiles:
+          - "lowrisc_systems_chip_earlgrey_cw310_0.1.bit"
+          - "rom.mmi"
+        archiveName: "latest-bitstreams.tar.gz"
+        gcpKeyFile: "gcpkey.json"
+        bucketURI: "gs://opentitan-bitstreams/master/latest"
   - publish: "$(Build.ArtifactStagingDirectory)"
     artifact: chip_earlgrey_cw310-build-out
     displayName: Upload all Vivado artifacts for CW310
@@ -751,3 +761,14 @@ jobs:
     - bash: ci/scripts/quick-bazel.sh
       displayName: quick-bazel
       continueOnError: true
+
+- job: mask_rom_test
+  displayName: Mask ROM Build and Test
+  dependsOn: lint
+  pool:
+    vmImage: ubuntu-18.04
+  steps:
+    - template: ci/install-package-dependencies.yml
+      # The default timeout is too short to build verilator so let's skip it for the first pass
+    - bash: ci/scripts/mask-rom-tests.sh
+      displayName: mask-rom-test

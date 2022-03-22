@@ -235,10 +235,11 @@ module kmac_reg_top (
   logic [9:0] entropy_period_prescaler_wd;
   logic [15:0] entropy_period_wait_timer_qs;
   logic [15:0] entropy_period_wait_timer_wd;
-  logic entropy_refresh_we;
-  logic [9:0] entropy_refresh_threshold_qs;
-  logic [9:0] entropy_refresh_threshold_wd;
   logic [9:0] entropy_refresh_hash_cnt_qs;
+  logic entropy_refresh_threshold_shadowed_re;
+  logic entropy_refresh_threshold_shadowed_we;
+  logic [9:0] entropy_refresh_threshold_shadowed_qs;
+  logic [9:0] entropy_refresh_threshold_shadowed_wd;
   logic entropy_seed_lower_we;
   logic [31:0] entropy_seed_lower_qs;
   logic [31:0] entropy_seed_lower_wd;
@@ -502,6 +503,9 @@ module kmac_reg_top (
 
 
   // R[intr_test]: V(True)
+  logic intr_test_qe;
+  logic [2:0] intr_test_flds_we;
+  assign intr_test_qe = &intr_test_flds_we;
   //   F[kmac_done]: 0:0
   prim_subreg_ext #(
     .DW    (1)
@@ -511,10 +515,11 @@ module kmac_reg_top (
     .wd     (intr_test_kmac_done_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.intr_test.kmac_done.qe),
+    .qe     (intr_test_flds_we[0]),
     .q      (reg2hw.intr_test.kmac_done.q),
     .qs     ()
   );
+  assign reg2hw.intr_test.kmac_done.qe = intr_test_qe;
 
   //   F[fifo_empty]: 1:1
   prim_subreg_ext #(
@@ -525,10 +530,11 @@ module kmac_reg_top (
     .wd     (intr_test_fifo_empty_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.intr_test.fifo_empty.qe),
+    .qe     (intr_test_flds_we[1]),
     .q      (reg2hw.intr_test.fifo_empty.q),
     .qs     ()
   );
+  assign reg2hw.intr_test.fifo_empty.qe = intr_test_qe;
 
   //   F[kmac_err]: 2:2
   prim_subreg_ext #(
@@ -539,13 +545,17 @@ module kmac_reg_top (
     .wd     (intr_test_kmac_err_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.intr_test.kmac_err.qe),
+    .qe     (intr_test_flds_we[2]),
     .q      (reg2hw.intr_test.kmac_err.q),
     .qs     ()
   );
+  assign reg2hw.intr_test.kmac_err.qe = intr_test_qe;
 
 
   // R[alert_test]: V(True)
+  logic alert_test_qe;
+  logic [1:0] alert_test_flds_we;
+  assign alert_test_qe = &alert_test_flds_we;
   //   F[recov_operation_err]: 0:0
   prim_subreg_ext #(
     .DW    (1)
@@ -555,10 +565,11 @@ module kmac_reg_top (
     .wd     (alert_test_recov_operation_err_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.alert_test.recov_operation_err.qe),
+    .qe     (alert_test_flds_we[0]),
     .q      (reg2hw.alert_test.recov_operation_err.q),
     .qs     ()
   );
+  assign reg2hw.alert_test.recov_operation_err.qe = alert_test_qe;
 
   //   F[fatal_fault_err]: 1:1
   prim_subreg_ext #(
@@ -569,10 +580,11 @@ module kmac_reg_top (
     .wd     (alert_test_fatal_fault_err_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.alert_test.fatal_fault_err.qe),
+    .qe     (alert_test_flds_we[1]),
     .q      (reg2hw.alert_test.fatal_fault_err.q),
     .qs     ()
   );
+  assign reg2hw.alert_test.fatal_fault_err.qe = alert_test_qe;
 
 
   // R[cfg_regwen]: V(True)
@@ -591,6 +603,17 @@ module kmac_reg_top (
 
 
   // R[cfg_shadowed]: V(False)
+  logic cfg_shadowed_qe;
+  logic [11:0] cfg_shadowed_flds_we;
+  prim_flop #(
+    .Width(1),
+    .ResetValue(0)
+  ) u_cfg_shadowed0_qe (
+    .clk_i(clk_i),
+    .rst_ni(rst_ni),
+    .d_i(&cfg_shadowed_flds_we),
+    .q_o(cfg_shadowed_qe)
+  );
   //   F[kmac_en]: 0:0
   prim_subreg_shadow #(
     .DW      (1),
@@ -611,7 +634,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.kmac_en.qe),
+    .qe     (cfg_shadowed_flds_we[0]),
     .q      (reg2hw.cfg_shadowed.kmac_en.q),
 
     // to register interface (read)
@@ -624,6 +647,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.kmac_en.err_update),
     .err_storage (reg2hw.cfg_shadowed.kmac_en.err_storage)
   );
+  assign reg2hw.cfg_shadowed.kmac_en.qe = cfg_shadowed_qe;
 
   //   F[kstrength]: 3:1
   prim_subreg_shadow #(
@@ -645,7 +669,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.kstrength.qe),
+    .qe     (cfg_shadowed_flds_we[1]),
     .q      (reg2hw.cfg_shadowed.kstrength.q),
 
     // to register interface (read)
@@ -658,6 +682,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.kstrength.err_update),
     .err_storage (reg2hw.cfg_shadowed.kstrength.err_storage)
   );
+  assign reg2hw.cfg_shadowed.kstrength.qe = cfg_shadowed_qe;
 
   //   F[mode]: 5:4
   prim_subreg_shadow #(
@@ -679,7 +704,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.mode.qe),
+    .qe     (cfg_shadowed_flds_we[2]),
     .q      (reg2hw.cfg_shadowed.mode.q),
 
     // to register interface (read)
@@ -692,6 +717,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.mode.err_update),
     .err_storage (reg2hw.cfg_shadowed.mode.err_storage)
   );
+  assign reg2hw.cfg_shadowed.mode.qe = cfg_shadowed_qe;
 
   //   F[msg_endianness]: 8:8
   prim_subreg_shadow #(
@@ -713,7 +739,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.msg_endianness.qe),
+    .qe     (cfg_shadowed_flds_we[3]),
     .q      (reg2hw.cfg_shadowed.msg_endianness.q),
 
     // to register interface (read)
@@ -726,6 +752,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.msg_endianness.err_update),
     .err_storage (reg2hw.cfg_shadowed.msg_endianness.err_storage)
   );
+  assign reg2hw.cfg_shadowed.msg_endianness.qe = cfg_shadowed_qe;
 
   //   F[state_endianness]: 9:9
   prim_subreg_shadow #(
@@ -747,7 +774,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.state_endianness.qe),
+    .qe     (cfg_shadowed_flds_we[4]),
     .q      (reg2hw.cfg_shadowed.state_endianness.q),
 
     // to register interface (read)
@@ -760,6 +787,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.state_endianness.err_update),
     .err_storage (reg2hw.cfg_shadowed.state_endianness.err_storage)
   );
+  assign reg2hw.cfg_shadowed.state_endianness.qe = cfg_shadowed_qe;
 
   //   F[sideload]: 12:12
   prim_subreg_shadow #(
@@ -781,7 +809,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.sideload.qe),
+    .qe     (cfg_shadowed_flds_we[5]),
     .q      (reg2hw.cfg_shadowed.sideload.q),
 
     // to register interface (read)
@@ -794,6 +822,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.sideload.err_update),
     .err_storage (reg2hw.cfg_shadowed.sideload.err_storage)
   );
+  assign reg2hw.cfg_shadowed.sideload.qe = cfg_shadowed_qe;
 
   //   F[entropy_mode]: 17:16
   prim_subreg_shadow #(
@@ -815,7 +844,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.entropy_mode.qe),
+    .qe     (cfg_shadowed_flds_we[6]),
     .q      (reg2hw.cfg_shadowed.entropy_mode.q),
 
     // to register interface (read)
@@ -828,6 +857,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.entropy_mode.err_update),
     .err_storage (reg2hw.cfg_shadowed.entropy_mode.err_storage)
   );
+  assign reg2hw.cfg_shadowed.entropy_mode.qe = cfg_shadowed_qe;
 
   //   F[entropy_fast_process]: 19:19
   prim_subreg_shadow #(
@@ -849,7 +879,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.entropy_fast_process.qe),
+    .qe     (cfg_shadowed_flds_we[7]),
     .q      (reg2hw.cfg_shadowed.entropy_fast_process.q),
 
     // to register interface (read)
@@ -862,6 +892,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.entropy_fast_process.err_update),
     .err_storage (reg2hw.cfg_shadowed.entropy_fast_process.err_storage)
   );
+  assign reg2hw.cfg_shadowed.entropy_fast_process.qe = cfg_shadowed_qe;
 
   //   F[msg_mask]: 20:20
   prim_subreg_shadow #(
@@ -883,7 +914,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.msg_mask.qe),
+    .qe     (cfg_shadowed_flds_we[8]),
     .q      (reg2hw.cfg_shadowed.msg_mask.q),
 
     // to register interface (read)
@@ -896,6 +927,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.msg_mask.err_update),
     .err_storage (reg2hw.cfg_shadowed.msg_mask.err_storage)
   );
+  assign reg2hw.cfg_shadowed.msg_mask.qe = cfg_shadowed_qe;
 
   //   F[entropy_ready]: 24:24
   prim_subreg_shadow #(
@@ -917,7 +949,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.entropy_ready.qe),
+    .qe     (cfg_shadowed_flds_we[9]),
     .q      (reg2hw.cfg_shadowed.entropy_ready.q),
 
     // to register interface (read)
@@ -930,6 +962,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.entropy_ready.err_update),
     .err_storage (reg2hw.cfg_shadowed.entropy_ready.err_storage)
   );
+  assign reg2hw.cfg_shadowed.entropy_ready.qe = cfg_shadowed_qe;
 
   //   F[err_processed]: 25:25
   prim_subreg_shadow #(
@@ -951,7 +984,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.err_processed.qe),
+    .qe     (cfg_shadowed_flds_we[10]),
     .q      (reg2hw.cfg_shadowed.err_processed.q),
 
     // to register interface (read)
@@ -964,6 +997,7 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.err_processed.err_update),
     .err_storage (reg2hw.cfg_shadowed.err_processed.err_storage)
   );
+  assign reg2hw.cfg_shadowed.err_processed.qe = cfg_shadowed_qe;
 
   //   F[en_unsupported_modestrength]: 26:26
   prim_subreg_shadow #(
@@ -985,7 +1019,7 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.cfg_shadowed.en_unsupported_modestrength.qe),
+    .qe     (cfg_shadowed_flds_we[11]),
     .q      (reg2hw.cfg_shadowed.en_unsupported_modestrength.q),
 
     // to register interface (read)
@@ -998,9 +1032,13 @@ module kmac_reg_top (
     .err_update  (reg2hw.cfg_shadowed.en_unsupported_modestrength.err_update),
     .err_storage (reg2hw.cfg_shadowed.en_unsupported_modestrength.err_storage)
   );
+  assign reg2hw.cfg_shadowed.en_unsupported_modestrength.qe = cfg_shadowed_qe;
 
 
   // R[cmd]: V(True)
+  logic cmd_qe;
+  logic [2:0] cmd_flds_we;
+  assign cmd_qe = &cmd_flds_we;
   //   F[cmd]: 3:0
   prim_subreg_ext #(
     .DW    (4)
@@ -1010,10 +1048,11 @@ module kmac_reg_top (
     .wd     (cmd_cmd_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.cmd.cmd.qe),
+    .qe     (cmd_flds_we[0]),
     .q      (reg2hw.cmd.cmd.q),
     .qs     ()
   );
+  assign reg2hw.cmd.cmd.qe = cmd_qe;
 
   //   F[entropy_req]: 8:8
   prim_subreg_ext #(
@@ -1024,10 +1063,11 @@ module kmac_reg_top (
     .wd     (cmd_entropy_req_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.cmd.entropy_req.qe),
+    .qe     (cmd_flds_we[1]),
     .q      (reg2hw.cmd.entropy_req.q),
     .qs     ()
   );
+  assign reg2hw.cmd.entropy_req.qe = cmd_qe;
 
   //   F[hash_cnt_clr]: 9:9
   prim_subreg_ext #(
@@ -1038,10 +1078,11 @@ module kmac_reg_top (
     .wd     (cmd_hash_cnt_clr_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.cmd.hash_cnt_clr.qe),
+    .qe     (cmd_flds_we[2]),
     .q      (reg2hw.cmd.hash_cnt_clr.q),
     .qs     ()
   );
+  assign reg2hw.cmd.hash_cnt_clr.qe = cmd_qe;
 
 
   // R[status]: V(True)
@@ -1210,33 +1251,7 @@ module kmac_reg_top (
   );
 
 
-  // R[entropy_refresh]: V(False)
-  //   F[threshold]: 9:0
-  prim_subreg #(
-    .DW      (10),
-    .SwAccess(prim_subreg_pkg::SwAccessRW),
-    .RESVAL  (10'h0)
-  ) u_entropy_refresh_threshold (
-    .clk_i   (clk_i),
-    .rst_ni  (rst_ni),
-
-    // from register interface
-    .we     (entropy_refresh_we & cfg_regwen_qs),
-    .wd     (entropy_refresh_threshold_wd),
-
-    // from internal hardware
-    .de     (1'b0),
-    .d      ('0),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.entropy_refresh.threshold.q),
-
-    // to register interface (read)
-    .qs     (entropy_refresh_threshold_qs)
-  );
-
-  //   F[hash_cnt]: 25:16
+  // R[entropy_refresh_hash_cnt]: V(False)
   prim_subreg #(
     .DW      (10),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -1250,8 +1265,8 @@ module kmac_reg_top (
     .wd     ('0),
 
     // from internal hardware
-    .de     (hw2reg.entropy_refresh.hash_cnt.de),
-    .d      (hw2reg.entropy_refresh.hash_cnt.d),
+    .de     (hw2reg.entropy_refresh_hash_cnt.de),
+    .d      (hw2reg.entropy_refresh_hash_cnt.d),
 
     // to internal hardware
     .qe     (),
@@ -1262,7 +1277,53 @@ module kmac_reg_top (
   );
 
 
+  // R[entropy_refresh_threshold_shadowed]: V(False)
+  prim_subreg_shadow #(
+    .DW      (10),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
+    .RESVAL  (10'h0)
+  ) u_entropy_refresh_threshold_shadowed (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .rst_shadowed_ni (rst_shadowed_ni),
+
+    // from register interface
+    .re     (entropy_refresh_threshold_shadowed_re),
+    .we     (entropy_refresh_threshold_shadowed_we & cfg_regwen_qs),
+    .wd     (entropy_refresh_threshold_shadowed_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.entropy_refresh_threshold_shadowed.q),
+
+    // to register interface (read)
+    .qs     (entropy_refresh_threshold_shadowed_qs),
+
+    // Shadow register phase. Relevant for hwext only.
+    .phase  (),
+
+    // Shadow register error conditions
+    .err_update  (reg2hw.entropy_refresh_threshold_shadowed.err_update),
+    .err_storage (reg2hw.entropy_refresh_threshold_shadowed.err_storage)
+  );
+
+
   // R[entropy_seed_lower]: V(False)
+  logic entropy_seed_lower_qe;
+  logic [0:0] entropy_seed_lower_flds_we;
+  prim_flop #(
+    .Width(1),
+    .ResetValue(0)
+  ) u_entropy_seed_lower0_qe (
+    .clk_i(clk_i),
+    .rst_ni(rst_ni),
+    .d_i(&entropy_seed_lower_flds_we),
+    .q_o(entropy_seed_lower_qe)
+  );
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -1280,15 +1341,27 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.entropy_seed_lower.qe),
+    .qe     (entropy_seed_lower_flds_we[0]),
     .q      (reg2hw.entropy_seed_lower.q),
 
     // to register interface (read)
     .qs     (entropy_seed_lower_qs)
   );
+  assign reg2hw.entropy_seed_lower.qe = entropy_seed_lower_qe;
 
 
   // R[entropy_seed_upper]: V(False)
+  logic entropy_seed_upper_qe;
+  logic [0:0] entropy_seed_upper_flds_we;
+  prim_flop #(
+    .Width(1),
+    .ResetValue(0)
+  ) u_entropy_seed_upper0_qe (
+    .clk_i(clk_i),
+    .rst_ni(rst_ni),
+    .d_i(&entropy_seed_upper_flds_we),
+    .q_o(entropy_seed_upper_qe)
+  );
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -1306,16 +1379,20 @@ module kmac_reg_top (
     .d      ('0),
 
     // to internal hardware
-    .qe     (reg2hw.entropy_seed_upper.qe),
+    .qe     (entropy_seed_upper_flds_we[0]),
     .q      (reg2hw.entropy_seed_upper.q),
 
     // to register interface (read)
     .qs     (entropy_seed_upper_qs)
   );
+  assign reg2hw.entropy_seed_upper.qe = entropy_seed_upper_qe;
 
 
   // Subregister 0 of Multireg key_share0
   // R[key_share0_0]: V(True)
+  logic key_share0_0_qe;
+  logic [0:0] key_share0_0_flds_we;
+  assign key_share0_0_qe = &key_share0_0_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_0 (
@@ -1324,14 +1401,18 @@ module kmac_reg_top (
     .wd     (key_share0_0_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[0].qe),
+    .qe     (key_share0_0_flds_we[0]),
     .q      (reg2hw.key_share0[0].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[0].qe = key_share0_0_qe;
 
 
   // Subregister 1 of Multireg key_share0
   // R[key_share0_1]: V(True)
+  logic key_share0_1_qe;
+  logic [0:0] key_share0_1_flds_we;
+  assign key_share0_1_qe = &key_share0_1_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_1 (
@@ -1340,14 +1421,18 @@ module kmac_reg_top (
     .wd     (key_share0_1_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[1].qe),
+    .qe     (key_share0_1_flds_we[0]),
     .q      (reg2hw.key_share0[1].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[1].qe = key_share0_1_qe;
 
 
   // Subregister 2 of Multireg key_share0
   // R[key_share0_2]: V(True)
+  logic key_share0_2_qe;
+  logic [0:0] key_share0_2_flds_we;
+  assign key_share0_2_qe = &key_share0_2_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_2 (
@@ -1356,14 +1441,18 @@ module kmac_reg_top (
     .wd     (key_share0_2_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[2].qe),
+    .qe     (key_share0_2_flds_we[0]),
     .q      (reg2hw.key_share0[2].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[2].qe = key_share0_2_qe;
 
 
   // Subregister 3 of Multireg key_share0
   // R[key_share0_3]: V(True)
+  logic key_share0_3_qe;
+  logic [0:0] key_share0_3_flds_we;
+  assign key_share0_3_qe = &key_share0_3_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_3 (
@@ -1372,14 +1461,18 @@ module kmac_reg_top (
     .wd     (key_share0_3_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[3].qe),
+    .qe     (key_share0_3_flds_we[0]),
     .q      (reg2hw.key_share0[3].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[3].qe = key_share0_3_qe;
 
 
   // Subregister 4 of Multireg key_share0
   // R[key_share0_4]: V(True)
+  logic key_share0_4_qe;
+  logic [0:0] key_share0_4_flds_we;
+  assign key_share0_4_qe = &key_share0_4_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_4 (
@@ -1388,14 +1481,18 @@ module kmac_reg_top (
     .wd     (key_share0_4_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[4].qe),
+    .qe     (key_share0_4_flds_we[0]),
     .q      (reg2hw.key_share0[4].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[4].qe = key_share0_4_qe;
 
 
   // Subregister 5 of Multireg key_share0
   // R[key_share0_5]: V(True)
+  logic key_share0_5_qe;
+  logic [0:0] key_share0_5_flds_we;
+  assign key_share0_5_qe = &key_share0_5_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_5 (
@@ -1404,14 +1501,18 @@ module kmac_reg_top (
     .wd     (key_share0_5_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[5].qe),
+    .qe     (key_share0_5_flds_we[0]),
     .q      (reg2hw.key_share0[5].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[5].qe = key_share0_5_qe;
 
 
   // Subregister 6 of Multireg key_share0
   // R[key_share0_6]: V(True)
+  logic key_share0_6_qe;
+  logic [0:0] key_share0_6_flds_we;
+  assign key_share0_6_qe = &key_share0_6_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_6 (
@@ -1420,14 +1521,18 @@ module kmac_reg_top (
     .wd     (key_share0_6_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[6].qe),
+    .qe     (key_share0_6_flds_we[0]),
     .q      (reg2hw.key_share0[6].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[6].qe = key_share0_6_qe;
 
 
   // Subregister 7 of Multireg key_share0
   // R[key_share0_7]: V(True)
+  logic key_share0_7_qe;
+  logic [0:0] key_share0_7_flds_we;
+  assign key_share0_7_qe = &key_share0_7_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_7 (
@@ -1436,14 +1541,18 @@ module kmac_reg_top (
     .wd     (key_share0_7_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[7].qe),
+    .qe     (key_share0_7_flds_we[0]),
     .q      (reg2hw.key_share0[7].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[7].qe = key_share0_7_qe;
 
 
   // Subregister 8 of Multireg key_share0
   // R[key_share0_8]: V(True)
+  logic key_share0_8_qe;
+  logic [0:0] key_share0_8_flds_we;
+  assign key_share0_8_qe = &key_share0_8_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_8 (
@@ -1452,14 +1561,18 @@ module kmac_reg_top (
     .wd     (key_share0_8_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[8].qe),
+    .qe     (key_share0_8_flds_we[0]),
     .q      (reg2hw.key_share0[8].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[8].qe = key_share0_8_qe;
 
 
   // Subregister 9 of Multireg key_share0
   // R[key_share0_9]: V(True)
+  logic key_share0_9_qe;
+  logic [0:0] key_share0_9_flds_we;
+  assign key_share0_9_qe = &key_share0_9_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_9 (
@@ -1468,14 +1581,18 @@ module kmac_reg_top (
     .wd     (key_share0_9_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[9].qe),
+    .qe     (key_share0_9_flds_we[0]),
     .q      (reg2hw.key_share0[9].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[9].qe = key_share0_9_qe;
 
 
   // Subregister 10 of Multireg key_share0
   // R[key_share0_10]: V(True)
+  logic key_share0_10_qe;
+  logic [0:0] key_share0_10_flds_we;
+  assign key_share0_10_qe = &key_share0_10_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_10 (
@@ -1484,14 +1601,18 @@ module kmac_reg_top (
     .wd     (key_share0_10_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[10].qe),
+    .qe     (key_share0_10_flds_we[0]),
     .q      (reg2hw.key_share0[10].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[10].qe = key_share0_10_qe;
 
 
   // Subregister 11 of Multireg key_share0
   // R[key_share0_11]: V(True)
+  logic key_share0_11_qe;
+  logic [0:0] key_share0_11_flds_we;
+  assign key_share0_11_qe = &key_share0_11_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_11 (
@@ -1500,14 +1621,18 @@ module kmac_reg_top (
     .wd     (key_share0_11_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[11].qe),
+    .qe     (key_share0_11_flds_we[0]),
     .q      (reg2hw.key_share0[11].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[11].qe = key_share0_11_qe;
 
 
   // Subregister 12 of Multireg key_share0
   // R[key_share0_12]: V(True)
+  logic key_share0_12_qe;
+  logic [0:0] key_share0_12_flds_we;
+  assign key_share0_12_qe = &key_share0_12_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_12 (
@@ -1516,14 +1641,18 @@ module kmac_reg_top (
     .wd     (key_share0_12_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[12].qe),
+    .qe     (key_share0_12_flds_we[0]),
     .q      (reg2hw.key_share0[12].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[12].qe = key_share0_12_qe;
 
 
   // Subregister 13 of Multireg key_share0
   // R[key_share0_13]: V(True)
+  logic key_share0_13_qe;
+  logic [0:0] key_share0_13_flds_we;
+  assign key_share0_13_qe = &key_share0_13_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_13 (
@@ -1532,14 +1661,18 @@ module kmac_reg_top (
     .wd     (key_share0_13_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[13].qe),
+    .qe     (key_share0_13_flds_we[0]),
     .q      (reg2hw.key_share0[13].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[13].qe = key_share0_13_qe;
 
 
   // Subregister 14 of Multireg key_share0
   // R[key_share0_14]: V(True)
+  logic key_share0_14_qe;
+  logic [0:0] key_share0_14_flds_we;
+  assign key_share0_14_qe = &key_share0_14_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_14 (
@@ -1548,14 +1681,18 @@ module kmac_reg_top (
     .wd     (key_share0_14_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[14].qe),
+    .qe     (key_share0_14_flds_we[0]),
     .q      (reg2hw.key_share0[14].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[14].qe = key_share0_14_qe;
 
 
   // Subregister 15 of Multireg key_share0
   // R[key_share0_15]: V(True)
+  logic key_share0_15_qe;
+  logic [0:0] key_share0_15_flds_we;
+  assign key_share0_15_qe = &key_share0_15_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_15 (
@@ -1564,14 +1701,18 @@ module kmac_reg_top (
     .wd     (key_share0_15_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share0[15].qe),
+    .qe     (key_share0_15_flds_we[0]),
     .q      (reg2hw.key_share0[15].q),
     .qs     ()
   );
+  assign reg2hw.key_share0[15].qe = key_share0_15_qe;
 
 
   // Subregister 0 of Multireg key_share1
   // R[key_share1_0]: V(True)
+  logic key_share1_0_qe;
+  logic [0:0] key_share1_0_flds_we;
+  assign key_share1_0_qe = &key_share1_0_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_0 (
@@ -1580,14 +1721,18 @@ module kmac_reg_top (
     .wd     (key_share1_0_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[0].qe),
+    .qe     (key_share1_0_flds_we[0]),
     .q      (reg2hw.key_share1[0].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[0].qe = key_share1_0_qe;
 
 
   // Subregister 1 of Multireg key_share1
   // R[key_share1_1]: V(True)
+  logic key_share1_1_qe;
+  logic [0:0] key_share1_1_flds_we;
+  assign key_share1_1_qe = &key_share1_1_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_1 (
@@ -1596,14 +1741,18 @@ module kmac_reg_top (
     .wd     (key_share1_1_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[1].qe),
+    .qe     (key_share1_1_flds_we[0]),
     .q      (reg2hw.key_share1[1].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[1].qe = key_share1_1_qe;
 
 
   // Subregister 2 of Multireg key_share1
   // R[key_share1_2]: V(True)
+  logic key_share1_2_qe;
+  logic [0:0] key_share1_2_flds_we;
+  assign key_share1_2_qe = &key_share1_2_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_2 (
@@ -1612,14 +1761,18 @@ module kmac_reg_top (
     .wd     (key_share1_2_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[2].qe),
+    .qe     (key_share1_2_flds_we[0]),
     .q      (reg2hw.key_share1[2].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[2].qe = key_share1_2_qe;
 
 
   // Subregister 3 of Multireg key_share1
   // R[key_share1_3]: V(True)
+  logic key_share1_3_qe;
+  logic [0:0] key_share1_3_flds_we;
+  assign key_share1_3_qe = &key_share1_3_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_3 (
@@ -1628,14 +1781,18 @@ module kmac_reg_top (
     .wd     (key_share1_3_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[3].qe),
+    .qe     (key_share1_3_flds_we[0]),
     .q      (reg2hw.key_share1[3].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[3].qe = key_share1_3_qe;
 
 
   // Subregister 4 of Multireg key_share1
   // R[key_share1_4]: V(True)
+  logic key_share1_4_qe;
+  logic [0:0] key_share1_4_flds_we;
+  assign key_share1_4_qe = &key_share1_4_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_4 (
@@ -1644,14 +1801,18 @@ module kmac_reg_top (
     .wd     (key_share1_4_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[4].qe),
+    .qe     (key_share1_4_flds_we[0]),
     .q      (reg2hw.key_share1[4].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[4].qe = key_share1_4_qe;
 
 
   // Subregister 5 of Multireg key_share1
   // R[key_share1_5]: V(True)
+  logic key_share1_5_qe;
+  logic [0:0] key_share1_5_flds_we;
+  assign key_share1_5_qe = &key_share1_5_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_5 (
@@ -1660,14 +1821,18 @@ module kmac_reg_top (
     .wd     (key_share1_5_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[5].qe),
+    .qe     (key_share1_5_flds_we[0]),
     .q      (reg2hw.key_share1[5].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[5].qe = key_share1_5_qe;
 
 
   // Subregister 6 of Multireg key_share1
   // R[key_share1_6]: V(True)
+  logic key_share1_6_qe;
+  logic [0:0] key_share1_6_flds_we;
+  assign key_share1_6_qe = &key_share1_6_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_6 (
@@ -1676,14 +1841,18 @@ module kmac_reg_top (
     .wd     (key_share1_6_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[6].qe),
+    .qe     (key_share1_6_flds_we[0]),
     .q      (reg2hw.key_share1[6].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[6].qe = key_share1_6_qe;
 
 
   // Subregister 7 of Multireg key_share1
   // R[key_share1_7]: V(True)
+  logic key_share1_7_qe;
+  logic [0:0] key_share1_7_flds_we;
+  assign key_share1_7_qe = &key_share1_7_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_7 (
@@ -1692,14 +1861,18 @@ module kmac_reg_top (
     .wd     (key_share1_7_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[7].qe),
+    .qe     (key_share1_7_flds_we[0]),
     .q      (reg2hw.key_share1[7].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[7].qe = key_share1_7_qe;
 
 
   // Subregister 8 of Multireg key_share1
   // R[key_share1_8]: V(True)
+  logic key_share1_8_qe;
+  logic [0:0] key_share1_8_flds_we;
+  assign key_share1_8_qe = &key_share1_8_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_8 (
@@ -1708,14 +1881,18 @@ module kmac_reg_top (
     .wd     (key_share1_8_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[8].qe),
+    .qe     (key_share1_8_flds_we[0]),
     .q      (reg2hw.key_share1[8].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[8].qe = key_share1_8_qe;
 
 
   // Subregister 9 of Multireg key_share1
   // R[key_share1_9]: V(True)
+  logic key_share1_9_qe;
+  logic [0:0] key_share1_9_flds_we;
+  assign key_share1_9_qe = &key_share1_9_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_9 (
@@ -1724,14 +1901,18 @@ module kmac_reg_top (
     .wd     (key_share1_9_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[9].qe),
+    .qe     (key_share1_9_flds_we[0]),
     .q      (reg2hw.key_share1[9].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[9].qe = key_share1_9_qe;
 
 
   // Subregister 10 of Multireg key_share1
   // R[key_share1_10]: V(True)
+  logic key_share1_10_qe;
+  logic [0:0] key_share1_10_flds_we;
+  assign key_share1_10_qe = &key_share1_10_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_10 (
@@ -1740,14 +1921,18 @@ module kmac_reg_top (
     .wd     (key_share1_10_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[10].qe),
+    .qe     (key_share1_10_flds_we[0]),
     .q      (reg2hw.key_share1[10].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[10].qe = key_share1_10_qe;
 
 
   // Subregister 11 of Multireg key_share1
   // R[key_share1_11]: V(True)
+  logic key_share1_11_qe;
+  logic [0:0] key_share1_11_flds_we;
+  assign key_share1_11_qe = &key_share1_11_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_11 (
@@ -1756,14 +1941,18 @@ module kmac_reg_top (
     .wd     (key_share1_11_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[11].qe),
+    .qe     (key_share1_11_flds_we[0]),
     .q      (reg2hw.key_share1[11].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[11].qe = key_share1_11_qe;
 
 
   // Subregister 12 of Multireg key_share1
   // R[key_share1_12]: V(True)
+  logic key_share1_12_qe;
+  logic [0:0] key_share1_12_flds_we;
+  assign key_share1_12_qe = &key_share1_12_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_12 (
@@ -1772,14 +1961,18 @@ module kmac_reg_top (
     .wd     (key_share1_12_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[12].qe),
+    .qe     (key_share1_12_flds_we[0]),
     .q      (reg2hw.key_share1[12].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[12].qe = key_share1_12_qe;
 
 
   // Subregister 13 of Multireg key_share1
   // R[key_share1_13]: V(True)
+  logic key_share1_13_qe;
+  logic [0:0] key_share1_13_flds_we;
+  assign key_share1_13_qe = &key_share1_13_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_13 (
@@ -1788,14 +1981,18 @@ module kmac_reg_top (
     .wd     (key_share1_13_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[13].qe),
+    .qe     (key_share1_13_flds_we[0]),
     .q      (reg2hw.key_share1[13].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[13].qe = key_share1_13_qe;
 
 
   // Subregister 14 of Multireg key_share1
   // R[key_share1_14]: V(True)
+  logic key_share1_14_qe;
+  logic [0:0] key_share1_14_flds_we;
+  assign key_share1_14_qe = &key_share1_14_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_14 (
@@ -1804,14 +2001,18 @@ module kmac_reg_top (
     .wd     (key_share1_14_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[14].qe),
+    .qe     (key_share1_14_flds_we[0]),
     .q      (reg2hw.key_share1[14].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[14].qe = key_share1_14_qe;
 
 
   // Subregister 15 of Multireg key_share1
   // R[key_share1_15]: V(True)
+  logic key_share1_15_qe;
+  logic [0:0] key_share1_15_flds_we;
+  assign key_share1_15_qe = &key_share1_15_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_15 (
@@ -1820,10 +2021,11 @@ module kmac_reg_top (
     .wd     (key_share1_15_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.key_share1[15].qe),
+    .qe     (key_share1_15_flds_we[0]),
     .q      (reg2hw.key_share1[15].q),
     .qs     ()
   );
+  assign reg2hw.key_share1[15].qe = key_share1_15_qe;
 
 
   // R[key_len]: V(False)
@@ -2176,7 +2378,7 @@ module kmac_reg_top (
 
 
 
-  logic [56:0] addr_hit;
+  logic [57:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == KMAC_INTR_STATE_OFFSET);
@@ -2188,54 +2390,55 @@ module kmac_reg_top (
     addr_hit[ 6] = (reg_addr == KMAC_CMD_OFFSET);
     addr_hit[ 7] = (reg_addr == KMAC_STATUS_OFFSET);
     addr_hit[ 8] = (reg_addr == KMAC_ENTROPY_PERIOD_OFFSET);
-    addr_hit[ 9] = (reg_addr == KMAC_ENTROPY_REFRESH_OFFSET);
-    addr_hit[10] = (reg_addr == KMAC_ENTROPY_SEED_LOWER_OFFSET);
-    addr_hit[11] = (reg_addr == KMAC_ENTROPY_SEED_UPPER_OFFSET);
-    addr_hit[12] = (reg_addr == KMAC_KEY_SHARE0_0_OFFSET);
-    addr_hit[13] = (reg_addr == KMAC_KEY_SHARE0_1_OFFSET);
-    addr_hit[14] = (reg_addr == KMAC_KEY_SHARE0_2_OFFSET);
-    addr_hit[15] = (reg_addr == KMAC_KEY_SHARE0_3_OFFSET);
-    addr_hit[16] = (reg_addr == KMAC_KEY_SHARE0_4_OFFSET);
-    addr_hit[17] = (reg_addr == KMAC_KEY_SHARE0_5_OFFSET);
-    addr_hit[18] = (reg_addr == KMAC_KEY_SHARE0_6_OFFSET);
-    addr_hit[19] = (reg_addr == KMAC_KEY_SHARE0_7_OFFSET);
-    addr_hit[20] = (reg_addr == KMAC_KEY_SHARE0_8_OFFSET);
-    addr_hit[21] = (reg_addr == KMAC_KEY_SHARE0_9_OFFSET);
-    addr_hit[22] = (reg_addr == KMAC_KEY_SHARE0_10_OFFSET);
-    addr_hit[23] = (reg_addr == KMAC_KEY_SHARE0_11_OFFSET);
-    addr_hit[24] = (reg_addr == KMAC_KEY_SHARE0_12_OFFSET);
-    addr_hit[25] = (reg_addr == KMAC_KEY_SHARE0_13_OFFSET);
-    addr_hit[26] = (reg_addr == KMAC_KEY_SHARE0_14_OFFSET);
-    addr_hit[27] = (reg_addr == KMAC_KEY_SHARE0_15_OFFSET);
-    addr_hit[28] = (reg_addr == KMAC_KEY_SHARE1_0_OFFSET);
-    addr_hit[29] = (reg_addr == KMAC_KEY_SHARE1_1_OFFSET);
-    addr_hit[30] = (reg_addr == KMAC_KEY_SHARE1_2_OFFSET);
-    addr_hit[31] = (reg_addr == KMAC_KEY_SHARE1_3_OFFSET);
-    addr_hit[32] = (reg_addr == KMAC_KEY_SHARE1_4_OFFSET);
-    addr_hit[33] = (reg_addr == KMAC_KEY_SHARE1_5_OFFSET);
-    addr_hit[34] = (reg_addr == KMAC_KEY_SHARE1_6_OFFSET);
-    addr_hit[35] = (reg_addr == KMAC_KEY_SHARE1_7_OFFSET);
-    addr_hit[36] = (reg_addr == KMAC_KEY_SHARE1_8_OFFSET);
-    addr_hit[37] = (reg_addr == KMAC_KEY_SHARE1_9_OFFSET);
-    addr_hit[38] = (reg_addr == KMAC_KEY_SHARE1_10_OFFSET);
-    addr_hit[39] = (reg_addr == KMAC_KEY_SHARE1_11_OFFSET);
-    addr_hit[40] = (reg_addr == KMAC_KEY_SHARE1_12_OFFSET);
-    addr_hit[41] = (reg_addr == KMAC_KEY_SHARE1_13_OFFSET);
-    addr_hit[42] = (reg_addr == KMAC_KEY_SHARE1_14_OFFSET);
-    addr_hit[43] = (reg_addr == KMAC_KEY_SHARE1_15_OFFSET);
-    addr_hit[44] = (reg_addr == KMAC_KEY_LEN_OFFSET);
-    addr_hit[45] = (reg_addr == KMAC_PREFIX_0_OFFSET);
-    addr_hit[46] = (reg_addr == KMAC_PREFIX_1_OFFSET);
-    addr_hit[47] = (reg_addr == KMAC_PREFIX_2_OFFSET);
-    addr_hit[48] = (reg_addr == KMAC_PREFIX_3_OFFSET);
-    addr_hit[49] = (reg_addr == KMAC_PREFIX_4_OFFSET);
-    addr_hit[50] = (reg_addr == KMAC_PREFIX_5_OFFSET);
-    addr_hit[51] = (reg_addr == KMAC_PREFIX_6_OFFSET);
-    addr_hit[52] = (reg_addr == KMAC_PREFIX_7_OFFSET);
-    addr_hit[53] = (reg_addr == KMAC_PREFIX_8_OFFSET);
-    addr_hit[54] = (reg_addr == KMAC_PREFIX_9_OFFSET);
-    addr_hit[55] = (reg_addr == KMAC_PREFIX_10_OFFSET);
-    addr_hit[56] = (reg_addr == KMAC_ERR_CODE_OFFSET);
+    addr_hit[ 9] = (reg_addr == KMAC_ENTROPY_REFRESH_HASH_CNT_OFFSET);
+    addr_hit[10] = (reg_addr == KMAC_ENTROPY_REFRESH_THRESHOLD_SHADOWED_OFFSET);
+    addr_hit[11] = (reg_addr == KMAC_ENTROPY_SEED_LOWER_OFFSET);
+    addr_hit[12] = (reg_addr == KMAC_ENTROPY_SEED_UPPER_OFFSET);
+    addr_hit[13] = (reg_addr == KMAC_KEY_SHARE0_0_OFFSET);
+    addr_hit[14] = (reg_addr == KMAC_KEY_SHARE0_1_OFFSET);
+    addr_hit[15] = (reg_addr == KMAC_KEY_SHARE0_2_OFFSET);
+    addr_hit[16] = (reg_addr == KMAC_KEY_SHARE0_3_OFFSET);
+    addr_hit[17] = (reg_addr == KMAC_KEY_SHARE0_4_OFFSET);
+    addr_hit[18] = (reg_addr == KMAC_KEY_SHARE0_5_OFFSET);
+    addr_hit[19] = (reg_addr == KMAC_KEY_SHARE0_6_OFFSET);
+    addr_hit[20] = (reg_addr == KMAC_KEY_SHARE0_7_OFFSET);
+    addr_hit[21] = (reg_addr == KMAC_KEY_SHARE0_8_OFFSET);
+    addr_hit[22] = (reg_addr == KMAC_KEY_SHARE0_9_OFFSET);
+    addr_hit[23] = (reg_addr == KMAC_KEY_SHARE0_10_OFFSET);
+    addr_hit[24] = (reg_addr == KMAC_KEY_SHARE0_11_OFFSET);
+    addr_hit[25] = (reg_addr == KMAC_KEY_SHARE0_12_OFFSET);
+    addr_hit[26] = (reg_addr == KMAC_KEY_SHARE0_13_OFFSET);
+    addr_hit[27] = (reg_addr == KMAC_KEY_SHARE0_14_OFFSET);
+    addr_hit[28] = (reg_addr == KMAC_KEY_SHARE0_15_OFFSET);
+    addr_hit[29] = (reg_addr == KMAC_KEY_SHARE1_0_OFFSET);
+    addr_hit[30] = (reg_addr == KMAC_KEY_SHARE1_1_OFFSET);
+    addr_hit[31] = (reg_addr == KMAC_KEY_SHARE1_2_OFFSET);
+    addr_hit[32] = (reg_addr == KMAC_KEY_SHARE1_3_OFFSET);
+    addr_hit[33] = (reg_addr == KMAC_KEY_SHARE1_4_OFFSET);
+    addr_hit[34] = (reg_addr == KMAC_KEY_SHARE1_5_OFFSET);
+    addr_hit[35] = (reg_addr == KMAC_KEY_SHARE1_6_OFFSET);
+    addr_hit[36] = (reg_addr == KMAC_KEY_SHARE1_7_OFFSET);
+    addr_hit[37] = (reg_addr == KMAC_KEY_SHARE1_8_OFFSET);
+    addr_hit[38] = (reg_addr == KMAC_KEY_SHARE1_9_OFFSET);
+    addr_hit[39] = (reg_addr == KMAC_KEY_SHARE1_10_OFFSET);
+    addr_hit[40] = (reg_addr == KMAC_KEY_SHARE1_11_OFFSET);
+    addr_hit[41] = (reg_addr == KMAC_KEY_SHARE1_12_OFFSET);
+    addr_hit[42] = (reg_addr == KMAC_KEY_SHARE1_13_OFFSET);
+    addr_hit[43] = (reg_addr == KMAC_KEY_SHARE1_14_OFFSET);
+    addr_hit[44] = (reg_addr == KMAC_KEY_SHARE1_15_OFFSET);
+    addr_hit[45] = (reg_addr == KMAC_KEY_LEN_OFFSET);
+    addr_hit[46] = (reg_addr == KMAC_PREFIX_0_OFFSET);
+    addr_hit[47] = (reg_addr == KMAC_PREFIX_1_OFFSET);
+    addr_hit[48] = (reg_addr == KMAC_PREFIX_2_OFFSET);
+    addr_hit[49] = (reg_addr == KMAC_PREFIX_3_OFFSET);
+    addr_hit[50] = (reg_addr == KMAC_PREFIX_4_OFFSET);
+    addr_hit[51] = (reg_addr == KMAC_PREFIX_5_OFFSET);
+    addr_hit[52] = (reg_addr == KMAC_PREFIX_6_OFFSET);
+    addr_hit[53] = (reg_addr == KMAC_PREFIX_7_OFFSET);
+    addr_hit[54] = (reg_addr == KMAC_PREFIX_8_OFFSET);
+    addr_hit[55] = (reg_addr == KMAC_PREFIX_9_OFFSET);
+    addr_hit[56] = (reg_addr == KMAC_PREFIX_10_OFFSET);
+    addr_hit[57] = (reg_addr == KMAC_ERR_CODE_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -2299,7 +2502,8 @@ module kmac_reg_top (
                (addr_hit[53] & (|(KMAC_PERMIT[53] & ~reg_be))) |
                (addr_hit[54] & (|(KMAC_PERMIT[54] & ~reg_be))) |
                (addr_hit[55] & (|(KMAC_PERMIT[55] & ~reg_be))) |
-               (addr_hit[56] & (|(KMAC_PERMIT[56] & ~reg_be)))));
+               (addr_hit[56] & (|(KMAC_PERMIT[56] & ~reg_be))) |
+               (addr_hit[57] & (|(KMAC_PERMIT[57] & ~reg_be)))));
   end
   assign intr_state_we = addr_hit[0] & reg_we & !reg_error;
 
@@ -2367,145 +2571,146 @@ module kmac_reg_top (
   assign entropy_period_prescaler_wd = reg_wdata[9:0];
 
   assign entropy_period_wait_timer_wd = reg_wdata[31:16];
-  assign entropy_refresh_we = addr_hit[9] & reg_we & !reg_error;
+  assign entropy_refresh_threshold_shadowed_re = addr_hit[10] & reg_re & !reg_error;
+  assign entropy_refresh_threshold_shadowed_we = addr_hit[10] & reg_we & !reg_error;
 
-  assign entropy_refresh_threshold_wd = reg_wdata[9:0];
-  assign entropy_seed_lower_we = addr_hit[10] & reg_we & !reg_error;
+  assign entropy_refresh_threshold_shadowed_wd = reg_wdata[9:0];
+  assign entropy_seed_lower_we = addr_hit[11] & reg_we & !reg_error;
 
   assign entropy_seed_lower_wd = reg_wdata[31:0];
-  assign entropy_seed_upper_we = addr_hit[11] & reg_we & !reg_error;
+  assign entropy_seed_upper_we = addr_hit[12] & reg_we & !reg_error;
 
   assign entropy_seed_upper_wd = reg_wdata[31:0];
-  assign key_share0_0_we = addr_hit[12] & reg_we & !reg_error;
+  assign key_share0_0_we = addr_hit[13] & reg_we & !reg_error;
 
   assign key_share0_0_wd = reg_wdata[31:0];
-  assign key_share0_1_we = addr_hit[13] & reg_we & !reg_error;
+  assign key_share0_1_we = addr_hit[14] & reg_we & !reg_error;
 
   assign key_share0_1_wd = reg_wdata[31:0];
-  assign key_share0_2_we = addr_hit[14] & reg_we & !reg_error;
+  assign key_share0_2_we = addr_hit[15] & reg_we & !reg_error;
 
   assign key_share0_2_wd = reg_wdata[31:0];
-  assign key_share0_3_we = addr_hit[15] & reg_we & !reg_error;
+  assign key_share0_3_we = addr_hit[16] & reg_we & !reg_error;
 
   assign key_share0_3_wd = reg_wdata[31:0];
-  assign key_share0_4_we = addr_hit[16] & reg_we & !reg_error;
+  assign key_share0_4_we = addr_hit[17] & reg_we & !reg_error;
 
   assign key_share0_4_wd = reg_wdata[31:0];
-  assign key_share0_5_we = addr_hit[17] & reg_we & !reg_error;
+  assign key_share0_5_we = addr_hit[18] & reg_we & !reg_error;
 
   assign key_share0_5_wd = reg_wdata[31:0];
-  assign key_share0_6_we = addr_hit[18] & reg_we & !reg_error;
+  assign key_share0_6_we = addr_hit[19] & reg_we & !reg_error;
 
   assign key_share0_6_wd = reg_wdata[31:0];
-  assign key_share0_7_we = addr_hit[19] & reg_we & !reg_error;
+  assign key_share0_7_we = addr_hit[20] & reg_we & !reg_error;
 
   assign key_share0_7_wd = reg_wdata[31:0];
-  assign key_share0_8_we = addr_hit[20] & reg_we & !reg_error;
+  assign key_share0_8_we = addr_hit[21] & reg_we & !reg_error;
 
   assign key_share0_8_wd = reg_wdata[31:0];
-  assign key_share0_9_we = addr_hit[21] & reg_we & !reg_error;
+  assign key_share0_9_we = addr_hit[22] & reg_we & !reg_error;
 
   assign key_share0_9_wd = reg_wdata[31:0];
-  assign key_share0_10_we = addr_hit[22] & reg_we & !reg_error;
+  assign key_share0_10_we = addr_hit[23] & reg_we & !reg_error;
 
   assign key_share0_10_wd = reg_wdata[31:0];
-  assign key_share0_11_we = addr_hit[23] & reg_we & !reg_error;
+  assign key_share0_11_we = addr_hit[24] & reg_we & !reg_error;
 
   assign key_share0_11_wd = reg_wdata[31:0];
-  assign key_share0_12_we = addr_hit[24] & reg_we & !reg_error;
+  assign key_share0_12_we = addr_hit[25] & reg_we & !reg_error;
 
   assign key_share0_12_wd = reg_wdata[31:0];
-  assign key_share0_13_we = addr_hit[25] & reg_we & !reg_error;
+  assign key_share0_13_we = addr_hit[26] & reg_we & !reg_error;
 
   assign key_share0_13_wd = reg_wdata[31:0];
-  assign key_share0_14_we = addr_hit[26] & reg_we & !reg_error;
+  assign key_share0_14_we = addr_hit[27] & reg_we & !reg_error;
 
   assign key_share0_14_wd = reg_wdata[31:0];
-  assign key_share0_15_we = addr_hit[27] & reg_we & !reg_error;
+  assign key_share0_15_we = addr_hit[28] & reg_we & !reg_error;
 
   assign key_share0_15_wd = reg_wdata[31:0];
-  assign key_share1_0_we = addr_hit[28] & reg_we & !reg_error;
+  assign key_share1_0_we = addr_hit[29] & reg_we & !reg_error;
 
   assign key_share1_0_wd = reg_wdata[31:0];
-  assign key_share1_1_we = addr_hit[29] & reg_we & !reg_error;
+  assign key_share1_1_we = addr_hit[30] & reg_we & !reg_error;
 
   assign key_share1_1_wd = reg_wdata[31:0];
-  assign key_share1_2_we = addr_hit[30] & reg_we & !reg_error;
+  assign key_share1_2_we = addr_hit[31] & reg_we & !reg_error;
 
   assign key_share1_2_wd = reg_wdata[31:0];
-  assign key_share1_3_we = addr_hit[31] & reg_we & !reg_error;
+  assign key_share1_3_we = addr_hit[32] & reg_we & !reg_error;
 
   assign key_share1_3_wd = reg_wdata[31:0];
-  assign key_share1_4_we = addr_hit[32] & reg_we & !reg_error;
+  assign key_share1_4_we = addr_hit[33] & reg_we & !reg_error;
 
   assign key_share1_4_wd = reg_wdata[31:0];
-  assign key_share1_5_we = addr_hit[33] & reg_we & !reg_error;
+  assign key_share1_5_we = addr_hit[34] & reg_we & !reg_error;
 
   assign key_share1_5_wd = reg_wdata[31:0];
-  assign key_share1_6_we = addr_hit[34] & reg_we & !reg_error;
+  assign key_share1_6_we = addr_hit[35] & reg_we & !reg_error;
 
   assign key_share1_6_wd = reg_wdata[31:0];
-  assign key_share1_7_we = addr_hit[35] & reg_we & !reg_error;
+  assign key_share1_7_we = addr_hit[36] & reg_we & !reg_error;
 
   assign key_share1_7_wd = reg_wdata[31:0];
-  assign key_share1_8_we = addr_hit[36] & reg_we & !reg_error;
+  assign key_share1_8_we = addr_hit[37] & reg_we & !reg_error;
 
   assign key_share1_8_wd = reg_wdata[31:0];
-  assign key_share1_9_we = addr_hit[37] & reg_we & !reg_error;
+  assign key_share1_9_we = addr_hit[38] & reg_we & !reg_error;
 
   assign key_share1_9_wd = reg_wdata[31:0];
-  assign key_share1_10_we = addr_hit[38] & reg_we & !reg_error;
+  assign key_share1_10_we = addr_hit[39] & reg_we & !reg_error;
 
   assign key_share1_10_wd = reg_wdata[31:0];
-  assign key_share1_11_we = addr_hit[39] & reg_we & !reg_error;
+  assign key_share1_11_we = addr_hit[40] & reg_we & !reg_error;
 
   assign key_share1_11_wd = reg_wdata[31:0];
-  assign key_share1_12_we = addr_hit[40] & reg_we & !reg_error;
+  assign key_share1_12_we = addr_hit[41] & reg_we & !reg_error;
 
   assign key_share1_12_wd = reg_wdata[31:0];
-  assign key_share1_13_we = addr_hit[41] & reg_we & !reg_error;
+  assign key_share1_13_we = addr_hit[42] & reg_we & !reg_error;
 
   assign key_share1_13_wd = reg_wdata[31:0];
-  assign key_share1_14_we = addr_hit[42] & reg_we & !reg_error;
+  assign key_share1_14_we = addr_hit[43] & reg_we & !reg_error;
 
   assign key_share1_14_wd = reg_wdata[31:0];
-  assign key_share1_15_we = addr_hit[43] & reg_we & !reg_error;
+  assign key_share1_15_we = addr_hit[44] & reg_we & !reg_error;
 
   assign key_share1_15_wd = reg_wdata[31:0];
-  assign key_len_we = addr_hit[44] & reg_we & !reg_error;
+  assign key_len_we = addr_hit[45] & reg_we & !reg_error;
 
   assign key_len_wd = reg_wdata[2:0];
-  assign prefix_0_we = addr_hit[45] & reg_we & !reg_error;
+  assign prefix_0_we = addr_hit[46] & reg_we & !reg_error;
 
   assign prefix_0_wd = reg_wdata[31:0];
-  assign prefix_1_we = addr_hit[46] & reg_we & !reg_error;
+  assign prefix_1_we = addr_hit[47] & reg_we & !reg_error;
 
   assign prefix_1_wd = reg_wdata[31:0];
-  assign prefix_2_we = addr_hit[47] & reg_we & !reg_error;
+  assign prefix_2_we = addr_hit[48] & reg_we & !reg_error;
 
   assign prefix_2_wd = reg_wdata[31:0];
-  assign prefix_3_we = addr_hit[48] & reg_we & !reg_error;
+  assign prefix_3_we = addr_hit[49] & reg_we & !reg_error;
 
   assign prefix_3_wd = reg_wdata[31:0];
-  assign prefix_4_we = addr_hit[49] & reg_we & !reg_error;
+  assign prefix_4_we = addr_hit[50] & reg_we & !reg_error;
 
   assign prefix_4_wd = reg_wdata[31:0];
-  assign prefix_5_we = addr_hit[50] & reg_we & !reg_error;
+  assign prefix_5_we = addr_hit[51] & reg_we & !reg_error;
 
   assign prefix_5_wd = reg_wdata[31:0];
-  assign prefix_6_we = addr_hit[51] & reg_we & !reg_error;
+  assign prefix_6_we = addr_hit[52] & reg_we & !reg_error;
 
   assign prefix_6_wd = reg_wdata[31:0];
-  assign prefix_7_we = addr_hit[52] & reg_we & !reg_error;
+  assign prefix_7_we = addr_hit[53] & reg_we & !reg_error;
 
   assign prefix_7_wd = reg_wdata[31:0];
-  assign prefix_8_we = addr_hit[53] & reg_we & !reg_error;
+  assign prefix_8_we = addr_hit[54] & reg_we & !reg_error;
 
   assign prefix_8_wd = reg_wdata[31:0];
-  assign prefix_9_we = addr_hit[54] & reg_we & !reg_error;
+  assign prefix_9_we = addr_hit[55] & reg_we & !reg_error;
 
   assign prefix_9_wd = reg_wdata[31:0];
-  assign prefix_10_we = addr_hit[55] & reg_we & !reg_error;
+  assign prefix_10_we = addr_hit[56] & reg_we & !reg_error;
 
   assign prefix_10_wd = reg_wdata[31:0];
 
@@ -2578,20 +2783,19 @@ module kmac_reg_top (
       end
 
       addr_hit[9]: begin
-        reg_rdata_next[9:0] = entropy_refresh_threshold_qs;
-        reg_rdata_next[25:16] = entropy_refresh_hash_cnt_qs;
+        reg_rdata_next[9:0] = entropy_refresh_hash_cnt_qs;
       end
 
       addr_hit[10]: begin
-        reg_rdata_next[31:0] = entropy_seed_lower_qs;
+        reg_rdata_next[9:0] = entropy_refresh_threshold_shadowed_qs;
       end
 
       addr_hit[11]: begin
-        reg_rdata_next[31:0] = entropy_seed_upper_qs;
+        reg_rdata_next[31:0] = entropy_seed_lower_qs;
       end
 
       addr_hit[12]: begin
-        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[31:0] = entropy_seed_upper_qs;
       end
 
       addr_hit[13]: begin
@@ -2719,54 +2923,58 @@ module kmac_reg_top (
       end
 
       addr_hit[44]: begin
-        reg_rdata_next[2:0] = '0;
+        reg_rdata_next[31:0] = '0;
       end
 
       addr_hit[45]: begin
-        reg_rdata_next[31:0] = prefix_0_qs;
+        reg_rdata_next[2:0] = '0;
       end
 
       addr_hit[46]: begin
-        reg_rdata_next[31:0] = prefix_1_qs;
+        reg_rdata_next[31:0] = prefix_0_qs;
       end
 
       addr_hit[47]: begin
-        reg_rdata_next[31:0] = prefix_2_qs;
+        reg_rdata_next[31:0] = prefix_1_qs;
       end
 
       addr_hit[48]: begin
-        reg_rdata_next[31:0] = prefix_3_qs;
+        reg_rdata_next[31:0] = prefix_2_qs;
       end
 
       addr_hit[49]: begin
-        reg_rdata_next[31:0] = prefix_4_qs;
+        reg_rdata_next[31:0] = prefix_3_qs;
       end
 
       addr_hit[50]: begin
-        reg_rdata_next[31:0] = prefix_5_qs;
+        reg_rdata_next[31:0] = prefix_4_qs;
       end
 
       addr_hit[51]: begin
-        reg_rdata_next[31:0] = prefix_6_qs;
+        reg_rdata_next[31:0] = prefix_5_qs;
       end
 
       addr_hit[52]: begin
-        reg_rdata_next[31:0] = prefix_7_qs;
+        reg_rdata_next[31:0] = prefix_6_qs;
       end
 
       addr_hit[53]: begin
-        reg_rdata_next[31:0] = prefix_8_qs;
+        reg_rdata_next[31:0] = prefix_7_qs;
       end
 
       addr_hit[54]: begin
-        reg_rdata_next[31:0] = prefix_9_qs;
+        reg_rdata_next[31:0] = prefix_8_qs;
       end
 
       addr_hit[55]: begin
-        reg_rdata_next[31:0] = prefix_10_qs;
+        reg_rdata_next[31:0] = prefix_9_qs;
       end
 
       addr_hit[56]: begin
+        reg_rdata_next[31:0] = prefix_10_qs;
+      end
+
+      addr_hit[57]: begin
         reg_rdata_next[31:0] = err_code_qs;
       end
 

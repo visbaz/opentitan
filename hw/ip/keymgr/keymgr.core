@@ -10,11 +10,13 @@ filesets:
     depend:
       - lowrisc:prim:all
       - lowrisc:prim:count
+      - lowrisc:prim:edn_req
       - lowrisc:prim:lc_sync
       - lowrisc:prim:lfsr
       - lowrisc:prim:msb_extend
       - lowrisc:prim:mubi
       - lowrisc:prim:sec_anchor
+      - lowrisc:prim:secded
       - lowrisc:prim:sparse_fsm
       - lowrisc:ip:flash_ctrl_pkg
       - lowrisc:ip:keymgr_pkg
@@ -23,15 +25,18 @@ filesets:
       - lowrisc:ip:rom_ctrl_pkg
       - lowrisc:ip:tlul
     files:
-      - rtl/keymgr_reg_top.sv
-      - rtl/keymgr_sideload_key_ctrl.sv
-      - rtl/keymgr_sideload_key.sv
+      - rtl/keymgr.sv
       - rtl/keymgr_ctrl.sv
       - rtl/keymgr_cfg_en.sv
-      - rtl/keymgr_kmac_if.sv
+      - rtl/keymgr_data_en_state.sv
+      - rtl/keymgr_err.sv
       - rtl/keymgr_input_checks.sv
+      - rtl/keymgr_kmac_if.sv
+      - rtl/keymgr_op_state_ctrl.sv
+      - rtl/keymgr_reg_top.sv
       - rtl/keymgr_reseed_ctrl.sv
-      - rtl/keymgr.sv
+      - rtl/keymgr_sideload_key.sv
+      - rtl/keymgr_sideload_key_ctrl.sv
     file_type: systemVerilogSource
 
   files_verilator_waiver:

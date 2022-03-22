@@ -62,7 +62,6 @@ package flash_ctrl_pkg;
   parameter int BusBankAddrW    = PageW + BusWordW;
   parameter int PhyAddrStart    = BusWordW - WordW;
 
-
   // fifo parameters
   parameter int FifoDepthW      = prim_util_pkg::vbits(FifoDepth+1);
 
@@ -78,6 +77,14 @@ package flash_ctrl_pkg;
     PageW'(InfoTypeSize[${type}] - 1)${"," if not loop.last else ""}
   % endfor
   };
+
+  // Flash Disable usage
+  typedef enum logic [1:0] {
+    PhyDisableIdx,
+    MpDisableIdx,
+    HostDisableIdx,
+    FlashDisableLast
+  } flash_disable_pos_e;
 
   ////////////////////////////
   // All memory protection, seed related parameters
@@ -433,6 +440,7 @@ package flash_ctrl_pkg;
     logic [NumBanks-1:0][BusAddrW-1:0] ecc_addr;
     jtag_pkg::jtag_rsp_t jtag_rsp;
     logic                intg_err;
+    logic                fsm_err;
   } flash_rsp_t;
 
   // default value of flash_rsp_t (for dangling ports)
@@ -448,7 +456,8 @@ package flash_ctrl_pkg;
     ecc_single_err:     '0,
     ecc_addr:           '0,
     jtag_rsp:           '0,
-    intg_err:           '0
+    intg_err:           '0,
+    fsm_err:            '0
   };
 
   // RMA entries

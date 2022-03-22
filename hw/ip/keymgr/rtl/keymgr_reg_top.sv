@@ -118,8 +118,8 @@ module keymgr_reg_top (
   logic intr_test_we;
   logic intr_test_wd;
   logic alert_test_we;
-  logic alert_test_fatal_fault_err_wd;
   logic alert_test_recov_operation_err_wd;
+  logic alert_test_fatal_fault_err_wd;
   logic cfg_regwen_re;
   logic cfg_regwen_qs;
   logic start_we;
@@ -304,14 +304,18 @@ module keymgr_reg_top (
   logic err_code_invalid_shadow_update_wd;
   logic fault_status_cmd_qs;
   logic fault_status_kmac_fsm_qs;
+  logic fault_status_kmac_done_qs;
   logic fault_status_kmac_op_qs;
   logic fault_status_kmac_out_qs;
   logic fault_status_regfile_intg_qs;
   logic fault_status_shadow_qs;
   logic fault_status_ctrl_fsm_intg_qs;
+  logic fault_status_ctrl_fsm_chk_qs;
   logic fault_status_ctrl_fsm_cnt_qs;
   logic fault_status_reseed_cnt_qs;
   logic fault_status_side_ctrl_fsm_qs;
+  logic fault_status_side_ctrl_sel_qs;
+  logic fault_status_key_ecc_qs;
 
   // Register instances
   // R[intr_state]: V(False)
@@ -367,6 +371,9 @@ module keymgr_reg_top (
 
 
   // R[intr_test]: V(True)
+  logic intr_test_qe;
+  logic [0:0] intr_test_flds_we;
+  assign intr_test_qe = &intr_test_flds_we;
   prim_subreg_ext #(
     .DW    (1)
   ) u_intr_test (
@@ -375,28 +382,18 @@ module keymgr_reg_top (
     .wd     (intr_test_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.intr_test.qe),
+    .qe     (intr_test_flds_we[0]),
     .q      (reg2hw.intr_test.q),
     .qs     ()
   );
+  assign reg2hw.intr_test.qe = intr_test_qe;
 
 
   // R[alert_test]: V(True)
-  //   F[fatal_fault_err]: 0:0
-  prim_subreg_ext #(
-    .DW    (1)
-  ) u_alert_test_fatal_fault_err (
-    .re     (1'b0),
-    .we     (alert_test_we),
-    .wd     (alert_test_fatal_fault_err_wd),
-    .d      ('0),
-    .qre    (),
-    .qe     (reg2hw.alert_test.fatal_fault_err.qe),
-    .q      (reg2hw.alert_test.fatal_fault_err.q),
-    .qs     ()
-  );
-
-  //   F[recov_operation_err]: 1:1
+  logic alert_test_qe;
+  logic [1:0] alert_test_flds_we;
+  assign alert_test_qe = &alert_test_flds_we;
+  //   F[recov_operation_err]: 0:0
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test_recov_operation_err (
@@ -405,10 +402,26 @@ module keymgr_reg_top (
     .wd     (alert_test_recov_operation_err_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.alert_test.recov_operation_err.qe),
+    .qe     (alert_test_flds_we[0]),
     .q      (reg2hw.alert_test.recov_operation_err.q),
     .qs     ()
   );
+  assign reg2hw.alert_test.recov_operation_err.qe = alert_test_qe;
+
+  //   F[fatal_fault_err]: 1:1
+  prim_subreg_ext #(
+    .DW    (1)
+  ) u_alert_test_fatal_fault_err (
+    .re     (1'b0),
+    .we     (alert_test_we),
+    .wd     (alert_test_fatal_fault_err_wd),
+    .d      ('0),
+    .qre    (),
+    .qe     (alert_test_flds_we[1]),
+    .q      (reg2hw.alert_test.fatal_fault_err.q),
+    .qs     ()
+  );
+  assign reg2hw.alert_test.fatal_fault_err.qe = alert_test_qe;
 
 
   // R[cfg_regwen]: V(True)
@@ -644,6 +657,9 @@ module keymgr_reg_top (
 
 
   // R[sw_binding_regwen]: V(True)
+  logic sw_binding_regwen_qe;
+  logic [0:0] sw_binding_regwen_flds_we;
+  assign sw_binding_regwen_qe = &sw_binding_regwen_flds_we;
   prim_subreg_ext #(
     .DW    (1)
   ) u_sw_binding_regwen (
@@ -652,10 +668,11 @@ module keymgr_reg_top (
     .wd     (sw_binding_regwen_wd),
     .d      (hw2reg.sw_binding_regwen.d),
     .qre    (),
-    .qe     (reg2hw.sw_binding_regwen.qe),
+    .qe     (sw_binding_regwen_flds_we[0]),
     .q      (reg2hw.sw_binding_regwen.q),
     .qs     (sw_binding_regwen_qs)
   );
+  assign reg2hw.sw_binding_regwen.qe = sw_binding_regwen_qe;
 
 
   // Subregister 0 of Multireg sealing_sw_binding
@@ -2128,7 +2145,32 @@ module keymgr_reg_top (
     .qs     (fault_status_kmac_fsm_qs)
   );
 
-  //   F[kmac_op]: 2:2
+  //   F[kmac_done]: 2:2
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .RESVAL  (1'h0)
+  ) u_fault_status_kmac_done (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+
+    // from register interface
+    .we     (1'b0),
+    .wd     ('0),
+
+    // from internal hardware
+    .de     (hw2reg.fault_status.kmac_done.de),
+    .d      (hw2reg.fault_status.kmac_done.d),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.fault_status.kmac_done.q),
+
+    // to register interface (read)
+    .qs     (fault_status_kmac_done_qs)
+  );
+
+  //   F[kmac_op]: 3:3
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2153,7 +2195,7 @@ module keymgr_reg_top (
     .qs     (fault_status_kmac_op_qs)
   );
 
-  //   F[kmac_out]: 3:3
+  //   F[kmac_out]: 4:4
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2178,7 +2220,7 @@ module keymgr_reg_top (
     .qs     (fault_status_kmac_out_qs)
   );
 
-  //   F[regfile_intg]: 4:4
+  //   F[regfile_intg]: 5:5
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2203,7 +2245,7 @@ module keymgr_reg_top (
     .qs     (fault_status_regfile_intg_qs)
   );
 
-  //   F[shadow]: 5:5
+  //   F[shadow]: 6:6
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2228,7 +2270,7 @@ module keymgr_reg_top (
     .qs     (fault_status_shadow_qs)
   );
 
-  //   F[ctrl_fsm_intg]: 6:6
+  //   F[ctrl_fsm_intg]: 7:7
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2253,7 +2295,32 @@ module keymgr_reg_top (
     .qs     (fault_status_ctrl_fsm_intg_qs)
   );
 
-  //   F[ctrl_fsm_cnt]: 7:7
+  //   F[ctrl_fsm_chk]: 8:8
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .RESVAL  (1'h0)
+  ) u_fault_status_ctrl_fsm_chk (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+
+    // from register interface
+    .we     (1'b0),
+    .wd     ('0),
+
+    // from internal hardware
+    .de     (hw2reg.fault_status.ctrl_fsm_chk.de),
+    .d      (hw2reg.fault_status.ctrl_fsm_chk.d),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.fault_status.ctrl_fsm_chk.q),
+
+    // to register interface (read)
+    .qs     (fault_status_ctrl_fsm_chk_qs)
+  );
+
+  //   F[ctrl_fsm_cnt]: 9:9
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2278,7 +2345,7 @@ module keymgr_reg_top (
     .qs     (fault_status_ctrl_fsm_cnt_qs)
   );
 
-  //   F[reseed_cnt]: 8:8
+  //   F[reseed_cnt]: 10:10
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2303,7 +2370,7 @@ module keymgr_reg_top (
     .qs     (fault_status_reseed_cnt_qs)
   );
 
-  //   F[side_ctrl_fsm]: 9:9
+  //   F[side_ctrl_fsm]: 11:11
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -2326,6 +2393,56 @@ module keymgr_reg_top (
 
     // to register interface (read)
     .qs     (fault_status_side_ctrl_fsm_qs)
+  );
+
+  //   F[side_ctrl_sel]: 12:12
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .RESVAL  (1'h0)
+  ) u_fault_status_side_ctrl_sel (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+
+    // from register interface
+    .we     (1'b0),
+    .wd     ('0),
+
+    // from internal hardware
+    .de     (hw2reg.fault_status.side_ctrl_sel.de),
+    .d      (hw2reg.fault_status.side_ctrl_sel.d),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.fault_status.side_ctrl_sel.q),
+
+    // to register interface (read)
+    .qs     (fault_status_side_ctrl_sel_qs)
+  );
+
+  //   F[key_ecc]: 13:13
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .RESVAL  (1'h0)
+  ) u_fault_status_key_ecc (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+
+    // from register interface
+    .we     (1'b0),
+    .wd     ('0),
+
+    // from internal hardware
+    .de     (hw2reg.fault_status.key_ecc.de),
+    .d      (hw2reg.fault_status.key_ecc.d),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.fault_status.key_ecc.q),
+
+    // to register interface (read)
+    .qs     (fault_status_key_ecc_qs)
   );
 
 
@@ -2476,9 +2593,9 @@ module keymgr_reg_top (
   assign intr_test_wd = reg_wdata[0];
   assign alert_test_we = addr_hit[3] & reg_we & !reg_error;
 
-  assign alert_test_fatal_fault_err_wd = reg_wdata[0];
+  assign alert_test_recov_operation_err_wd = reg_wdata[0];
 
-  assign alert_test_recov_operation_err_wd = reg_wdata[1];
+  assign alert_test_fatal_fault_err_wd = reg_wdata[1];
   assign cfg_regwen_re = addr_hit[4] & reg_re & !reg_error;
   assign start_we = addr_hit[5] & reg_we & !reg_error;
 
@@ -2916,14 +3033,18 @@ module keymgr_reg_top (
       addr_hit[61]: begin
         reg_rdata_next[0] = fault_status_cmd_qs;
         reg_rdata_next[1] = fault_status_kmac_fsm_qs;
-        reg_rdata_next[2] = fault_status_kmac_op_qs;
-        reg_rdata_next[3] = fault_status_kmac_out_qs;
-        reg_rdata_next[4] = fault_status_regfile_intg_qs;
-        reg_rdata_next[5] = fault_status_shadow_qs;
-        reg_rdata_next[6] = fault_status_ctrl_fsm_intg_qs;
-        reg_rdata_next[7] = fault_status_ctrl_fsm_cnt_qs;
-        reg_rdata_next[8] = fault_status_reseed_cnt_qs;
-        reg_rdata_next[9] = fault_status_side_ctrl_fsm_qs;
+        reg_rdata_next[2] = fault_status_kmac_done_qs;
+        reg_rdata_next[3] = fault_status_kmac_op_qs;
+        reg_rdata_next[4] = fault_status_kmac_out_qs;
+        reg_rdata_next[5] = fault_status_regfile_intg_qs;
+        reg_rdata_next[6] = fault_status_shadow_qs;
+        reg_rdata_next[7] = fault_status_ctrl_fsm_intg_qs;
+        reg_rdata_next[8] = fault_status_ctrl_fsm_chk_qs;
+        reg_rdata_next[9] = fault_status_ctrl_fsm_cnt_qs;
+        reg_rdata_next[10] = fault_status_reseed_cnt_qs;
+        reg_rdata_next[11] = fault_status_side_ctrl_fsm_qs;
+        reg_rdata_next[12] = fault_status_side_ctrl_sel_qs;
+        reg_rdata_next[13] = fault_status_key_ecc_qs;
       end
 
       default: begin

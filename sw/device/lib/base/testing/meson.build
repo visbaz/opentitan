@@ -7,6 +7,7 @@ sw_lib_testing_bitfield = declare_dependency(
     'bitfield',
     sources: [
       meson.project_source_root() / 'sw/device/lib/base/bitfield.c',
+      meson.project_source_root() / 'sw/device/lib/base/math.c',
     ],
     native: true,
   )
@@ -59,6 +60,7 @@ sw_lib_base_testing_mock_mmio = declare_dependency(
     dependencies: [
       sw_vendor_gtest,
       sw_lib_testing_bitfield,
+      sw_lib_testing_memory,
     ],
     native: true,
     c_args: ['-DMOCK_MMIO'],

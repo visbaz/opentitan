@@ -29,6 +29,8 @@ module usbdev_usbif  #(
 
   output logic                     usb_d_o,
   output logic                     usb_se0_o,
+  output logic                     usb_dp_o,
+  output logic                     usb_dn_o,
   output logic                     usb_oe_o,
 
   output logic                     usb_pullup_en_o,
@@ -67,6 +69,9 @@ module usbdev_usbif  #(
   output logic [31:0]              mem_wdata_o,
   input  logic [31:0]              mem_rdata_i,
 
+  // time reference
+  input  logic                     us_tick_i,
+
   // control
   input  logic                     enable_i,
   input  logic [6:0]               devaddr_i,
@@ -75,8 +80,11 @@ module usbdev_usbif  #(
   input  logic [NEndpoints-1:0]    out_ep_enabled_i,
   input  logic [NEndpoints-1:0]    out_ep_iso_i,
   input  logic [NEndpoints-1:0]    in_ep_iso_i,
+  input  logic                     diff_rx_ok_i, // 1: differential symbols (K/J) are valid
   input  logic                     cfg_eop_single_bit_i, // 1: detect a single SE0 bit as EOP
   input  logic                     cfg_use_diff_rcvr_i, // 1: use single-ended rx data on usb_d_i
+  input  logic                     cfg_pinflip_i, // 1: Treat outputs and inputs as though D+/D-
+                                                  // are flipped
   input  logic                     tx_osc_test_mode_i, // Oscillator test mode: constant JK output
   input  logic [NEndpoints-1:0]    data_toggle_clear_i, // Clear the data toggles for an EP
   input  logic                     resume_link_active_i, // Jump from LinkPowered to LinkResuming
@@ -263,7 +271,7 @@ module usbdev_usbif  #(
   assign set_sent_o = in_ep_xact_end;
 
   logic [10:0]     frame_index_raw;
-  logic            rx_jjj_det;
+  logic            rx_idle_det;
   logic            rx_j_det;
 
   usb_fs_nb_pe #(
@@ -278,14 +286,18 @@ module usbdev_usbif  #(
 
     .cfg_eop_single_bit_i  (cfg_eop_single_bit_i),
     .cfg_use_diff_rcvr_i   (cfg_use_diff_rcvr_i),
+    .cfg_pinflip_i         (cfg_pinflip_i),
     .tx_osc_test_mode_i    (tx_osc_test_mode_i),
     .data_toggle_clear_i   (data_toggle_clear_i),
+    .diff_rx_ok_i          (diff_rx_ok_i),
 
     .usb_d_i               (usb_d_i),
     .usb_dp_i              (usb_dp_i),
     .usb_dn_i              (usb_dn_i),
     .usb_d_o               (usb_d_o),
     .usb_se0_o             (usb_se0_o),
+    .usb_dp_o              (usb_dp_o),
+    .usb_dn_o              (usb_dn_o),
     .usb_oe_o              (usb_oe_o),
 
     .dev_addr_i            (devaddr_i),
@@ -320,7 +332,7 @@ module usbdev_usbif  #(
     .in_ep_iso_i           (in_ep_iso_i),
 
     // rx status
-    .rx_jjj_det_o          (rx_jjj_det),
+    .rx_idle_det_o         (rx_idle_det),
     .rx_j_det_o            (rx_j_det),
 
     // error signals
@@ -333,26 +345,9 @@ module usbdev_usbif  #(
     .frame_index_o         (frame_index_raw)
   );
 
-  // us_tick ticks for one cycle every us
-  logic [5:0]   ns_cnt;
-  logic         us_tick;
-  logic         do_internal_sof;
-
-  assign us_tick = (ns_cnt == 6'd48);
-  always_ff @(posedge clk_48mhz_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      ns_cnt <= '0;
-    end else begin
-      if (us_tick) begin
-        ns_cnt <= '0;
-      end else begin
-        ns_cnt <= ns_cnt + 1'b1;
-      end
-    end
-  end
-
   // Capture frame number (host sends every 1ms)
   // Generate an internal SOF if the host's is missing.
+  logic do_internal_sof;
   logic [10:0] frame_d, frame_q;
 
   assign frame_o = frame_q;
@@ -378,13 +373,13 @@ module usbdev_usbif  #(
   usbdev_linkstate u_usbdev_linkstate (
     .clk_48mhz_i           (clk_48mhz_i),
     .rst_ni                (rst_ni),
-    .us_tick_i             (us_tick),
+    .us_tick_i             (us_tick_i),
     .usb_sense_i           (usb_sense_i),
     .usb_dp_i              (usb_dp_i),
     .usb_dn_i              (usb_dn_i),
     .usb_oe_i              (usb_oe_o),
     .usb_pullup_en_i       (enable_i),
-    .rx_jjj_det_i          (rx_jjj_det),
+    .rx_idle_det_i         (rx_idle_det),
     .rx_j_det_i            (rx_j_det),
     .sof_valid_i           (sof_valid_o),
     .resume_link_active_i  (resume_link_active_i),
@@ -402,5 +397,13 @@ module usbdev_usbif  #(
   ////////////////
   // Assertions //
   ////////////////
+  `ASSERT_INIT(ParamNEndpointsValid, (NEndpoints > 0) && (NEndpoints <= 16))
+  `ASSERT_INIT(ParamAVFifoWidthValid, AVFifoWidth > 0)
+  `ASSERT_INIT(ParamRXFifoWidthValid, RXFifoWidth > 0)
+  `ASSERT_INIT(ParamMaxPktSizeByteValid, MaxPktSizeByte == 64)
+  `ASSERT_INIT(ParamNBufValid, NBuf > 1)
+  // The SRAM should be large enough for all the buffers of max size (4-byte
+  // data width)
+  `ASSERT_INIT(ParamSramAwValid, SramAw >= NBufWidth + PktW - 2)
 
 endmodule

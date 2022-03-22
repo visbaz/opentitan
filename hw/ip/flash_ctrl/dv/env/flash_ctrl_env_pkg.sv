@@ -23,9 +23,9 @@ package flash_ctrl_env_pkg;
   `include "dv_macros.svh"
 
   // parameters
-  parameter string LIST_OF_ALERTS[] = {"recov_err", "fatal_err"};
+  parameter string LIST_OF_ALERTS[] = {"recov_err", "fatal_std_err", "fatal_err"};
 
-  parameter uint NUM_ALERTS = 4;
+  parameter uint NUM_ALERTS = 3;
   parameter uint FlashNumPages = flash_ctrl_pkg::NumBanks * flash_ctrl_pkg::PagesPerBank;
   parameter uint FlashSizeBytes         = FlashNumPages * flash_ctrl_pkg::WordsPerPage *
                                             flash_ctrl_pkg::DataWidth / 8;
@@ -167,6 +167,16 @@ package flash_ctrl_env_pkg;
 
   // Data queue for flash transactions
   typedef logic [TL_DW-1:0] data_q_t[$];
+  typedef bit [TL_DW-1:0] data_t;
+  typedef bit [TL_AW-1:0] addr_t;
+
+  // types
+  typedef class flash_ctrl_scoreboard;
+
+  // Parameter for Probing into the DUT RMA FSM
+  parameter string PRB_RMA_FSM = "tb.dut.u_flash_hw_if.state_q";
+  // Taken from enum type lcmgr_state_e in flash_ctrl_lcmgr.sv
+  parameter uint RMA_FSM_STATE_ST_RMA_RSP = 11'b10100100001;
 
   // functions
 

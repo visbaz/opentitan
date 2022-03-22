@@ -12,8 +12,10 @@ class adc_ctrl_filters_wakeup_vseq extends adc_ctrl_filters_polled_vseq;
   virtual task configure_adc_ctrl();
     bit [ADC_CTRL_NUM_FILTERS-1:0] adc_wakeup_ctl;
     super.configure_adc_ctrl();
-    // Enable wakeup
     `DV_CHECK_STD_RANDOMIZE_FATAL(adc_wakeup_ctl)
+    // Low power mode
+    cfg.testmode = AdcCtrlTestmodeLowpower;
+    // Enable wakeup
     cfg.adc_wakeup_ctl = adc_wakeup_ctl;
     csr_wr(ral.adc_wakeup_ctl, cfg.adc_wakeup_ctl);
   endtask
@@ -30,7 +32,6 @@ class adc_ctrl_filters_wakeup_vseq extends adc_ctrl_filters_polled_vseq;
       csr_rd(ral.filter_status, rdata);
       // Randomly erase adc_wakeup_status
       if ($urandom_range(0, 10) > 9) begin
-        //csr_wr(ral.adc_wakeup_status, $urandom());
         csr_wr(ral.filter_status, $urandom());
       end
     end

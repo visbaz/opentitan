@@ -36,6 +36,7 @@ module keymgr_kmac_if import keymgr_pkg::*;(
   // error outputs
   output logic fsm_error_o,
   output logic kmac_error_o,
+  output logic kmac_done_error_o,
   output logic cmd_error_o
 );
 
@@ -119,6 +120,8 @@ module keymgr_kmac_if import keymgr_pkg::*;(
   logic start;
   logic [3:0] inputs_invalid_d, inputs_invalid_q;
   logic clr_err;
+  logic kmac_done_vld;
+  logic cmd_chk;
 
   data_state_e state_q, state_d;
 
@@ -188,11 +191,18 @@ module keymgr_kmac_if import keymgr_pkg::*;(
     fsm_error_o = '0;
     kmac_error_o = '0;
 
+    kmac_done_vld = '0;
+
+    cmd_chk = 1'b1;
+
     unique case (state_q)
 
       StIdle: begin
         // if for some reason multiple bits are set, adv_en has priority
         // as the current key state will be destroyed
+
+        // cross check for commands once trasnaction begins
+        cmd_chk = '0;
         if (start) begin
           cnt_set = 1'b1;
           if (adv_en_i) begin
@@ -243,6 +253,7 @@ module keymgr_kmac_if import keymgr_pkg::*;(
       end
 
       StOpWait: begin
+        kmac_done_vld = 1'b1;
         if (kmac_data_i.done) begin
           kmac_error_o = kmac_data_i.error;
           done_o = 1'b1;
@@ -251,6 +262,7 @@ module keymgr_kmac_if import keymgr_pkg::*;(
       end
 
       StClean: begin
+        cmd_chk = '0;
         done_o = 1'b1;
 
         // wait for control side to ack done by waiting start de-assertion
@@ -271,16 +283,18 @@ module keymgr_kmac_if import keymgr_pkg::*;(
     endcase // unique case (state_q)
 
     // unconditional error transitions
+    // counter errors may disturb the fsm flow and are
+    // treated like fsm errors
     if (cnt_err) begin
       state_d = StError;
     end
   end
 
-  // If an fsm error is detected, there is no guarantee the transaction can completely gracefully.
-  // Allow the transaction to terminate early with random data.
-  assign data_o = start && done_o && !fsm_error_o ? {kmac_data_i.digest_share1,
-                                                     kmac_data_i.digest_share0} :
-                                                    {DecoyOutputCopies{entropy_i[0]}};
+  // when transaction is not complete, populate the data with random
+  assign data_o = start && done_o ?
+                  {kmac_data_i.digest_share1,
+                   kmac_data_i.digest_share0} :
+                  {DecoyOutputCopies{entropy_i[0]}};
 
   // The input invalid check is done whenever transactions are ongoing with kmac
   // once set, it cannot be unset until transactions are fully complete
@@ -330,25 +344,52 @@ module keymgr_kmac_if import keymgr_pkg::*;(
   assign kmac_data_o.last  = last;
   assign kmac_data_o.strb  = strb;
 
+  // kmac done is asserted outside of expected window
+  // SEC_CM: KMAC_IF_DONE.CTRL.CONSISTENCY
+  logic kmac_done_err_q, kmac_done_err_d;
+  assign kmac_done_err_d = ~kmac_done_vld & kmac_data_i.done |
+                           kmac_done_err_q;
+  assign kmac_done_error_o = kmac_done_err_q;
+
+
   // the enables must be 1 hot
-  logic [2:0] enables, enables_sub;
-  assign enables = {adv_en_i, id_en_i, gen_en_i};
-  assign enables_sub = enables - 1'b1;
+  logic [2:0] enables_d, enables_q, enables_sub;
+  assign enables_d = {adv_en_i, id_en_i, gen_en_i};
+  assign enables_sub = enables_d - 1'b1;
+
+  // cross check to ensure the one-hot command that kicked off
+  // the transaction remains consistent throughout.
+  logic cmd_consty_err_q, cmd_consty_err_d;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      enables_q <= '0;
+    end else if (cnt_set) begin
+      enables_q <= enables_d;
+    end
+  end
+  assign cmd_consty_err_d = (cmd_chk & (enables_q != enables_d)) |
+                            cmd_consty_err_q;
 
   // if a one hot error occurs, latch onto it permanently
+  // SEC_CM: KMAC_IF_CMD.CTRL.CONSISTENCY
   logic one_hot_err_q, one_hot_err_d;
-  assign one_hot_err_d = |(enables & enables_sub);
+  assign one_hot_err_d = |(enables_d & enables_sub) |
+                         one_hot_err_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       one_hot_err_q <= '0;
-    end else if (one_hot_err_d) begin
-      one_hot_err_q <= '1;
+      kmac_done_err_q <= '0;
+      cmd_consty_err_q <= '0;
+    end else begin
+      one_hot_err_q <= one_hot_err_d;
+      kmac_done_err_q <= kmac_done_err_d;
+      cmd_consty_err_q <= cmd_consty_err_d;
     end
   end
 
   // command error occurs if kmac errors or if the command itself is invalid
-  assign cmd_error_o = one_hot_err_q;
+  assign cmd_error_o = one_hot_err_q | cmd_consty_err_q;
 
   // request entropy to churn whenever a transaction is accepted
   assign prng_en_o = kmac_data_o.valid & kmac_data_i.ready;

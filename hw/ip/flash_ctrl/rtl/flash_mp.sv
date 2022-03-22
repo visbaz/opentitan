@@ -11,6 +11,8 @@ module flash_mp import flash_ctrl_pkg::*; import flash_ctrl_reg_pkg::*; (
   input clk_i,
   input rst_ni,
 
+  input prim_mubi_pkg::mubi4_t flash_disable_i,
+
   // interface selection
   input flash_sel_e if_sel_i,
 
@@ -184,7 +186,6 @@ module flash_mp import flash_ctrl_pkg::*; import flash_ctrl_reg_pkg::*; (
   assign data_ecc_en      = data_en & (rd_i | prog_i) & data_region_cfg.ecc_en.q;
   assign data_he_en       = data_en &                   data_region_cfg.he_en.q;
 
-
   assign invalid_data_txn = req_i & data_part_sel &
                             ~(data_rd_en |
                               data_prog_en |
@@ -234,7 +235,8 @@ module flash_mp import flash_ctrl_pkg::*; import flash_ctrl_reg_pkg::*; (
   assign info_rd_en       = info_en & rd_i            & page_cfg.rd_en.q;
   assign info_prog_en     = info_en & prog_i          & page_cfg.prog_en.q;
   assign info_pg_erase_en = info_en & pg_erase_i      & page_cfg.erase_en.q;
-  assign info_bk_erase_en = info_en & bk_erase_i      & |bk_erase_en;
+  // when info is selected for bank erase, the page configuration does not matter
+  assign info_bk_erase_en = info_part_sel & bk_erase_i & |bk_erase_en;
   assign info_scramble_en = info_en & (rd_i | prog_i) & page_cfg.scramble_en.q;
   assign info_ecc_en      = info_en & (rd_i | prog_i) & page_cfg.ecc_en.q;
   assign info_he_en       = info_en &                   page_cfg.he_en.q;
@@ -259,7 +261,10 @@ module flash_mp import flash_ctrl_pkg::*; import flash_ctrl_reg_pkg::*; (
 
   logic txn_err;
   logic no_allowed_txn;
-  assign no_allowed_txn = req_i & (addr_invalid | invalid_data_txn | invalid_info_txn);
+  // if flash_disable is true, transaction is always invalid
+  assign no_allowed_txn = req_i &
+                           ((prim_mubi_pkg::mubi4_test_true_loose(flash_disable_i)) |
+                            (addr_invalid | invalid_data_txn | invalid_info_txn));
 
   // return done and error the next cycle
   always_ff @(posedge clk_i or negedge rst_ni) begin

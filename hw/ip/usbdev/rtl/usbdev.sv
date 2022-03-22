@@ -11,8 +11,13 @@
 module usbdev
   import usbdev_pkg::*;
   import usbdev_reg_pkg::*;
+  import prim_util_pkg::vbits;
 #(
-  parameter logic [NumAlerts-1:0] AlertAsyncOn = {NumAlerts{1'b1}}
+  parameter logic [NumAlerts-1:0] AlertAsyncOn = {NumAlerts{1'b1}},
+  // Max time (in microseconds) from rx_enable_o high to the
+  // external differential receiver outputting valid data (when
+  // configured to use one).
+  parameter int unsigned RcvrWakeTimeUs = 1
 ) (
   input  logic       clk_i,
   input  logic       rst_ni,
@@ -170,12 +175,37 @@ module usbdev
   /////////////////////////////////
   logic usb_tx_d;
   logic usb_tx_se0;
+  logic usb_tx_dp;
+  logic usb_tx_dn;
   logic usb_tx_oe;
   /////////////////////////////////
   // USB contol pins after CDC   //
   /////////////////////////////////
   logic usb_pwr_sense;
   logic usb_pullup_en;
+  logic usb_dp_pullup_en;
+  logic usb_dn_pullup_en;
+
+  //////////////////////////////////
+  // Microsecond timing reference //
+  //////////////////////////////////
+  // us_tick ticks for one cycle every us, and it is based off a free-running
+  // counter.
+  logic [5:0]   ns_cnt;
+  logic         us_tick;
+
+  assign us_tick = (ns_cnt == 6'd48);
+  always_ff @(posedge clk_usb_48mhz_i or negedge rst_usb_48mhz_ni) begin
+    if (!rst_usb_48mhz_ni) begin
+      ns_cnt <= '0;
+    end else begin
+      if (us_tick) begin
+        ns_cnt <= '0;
+      end else begin
+        ns_cnt <= ns_cnt + 1'b1;
+      end
+    end
+  end
 
   /////////////////////////////
   // Receive interface fifos //
@@ -190,6 +220,8 @@ module usbdev
 
   logic [AVFifoWidth - 1:0] usb_av_rdata;
   logic [RXFifoWidth - 1:0] usb_rx_wdata, rx_rdata_raw, rx_rdata;
+
+  logic [NEndpoints-1:0] clear_rxenable_out;
 
   assign event_av_overflow = reg2hw.avbuffer.qe & (~av_fifo_wready);
   assign hw2reg.usbstat.av_full.d = ~av_fifo_wready;
@@ -262,13 +294,14 @@ module usbdev
   logic [NEndpoints-1:0] clear_rdybit, set_sentbit, update_pend;
   logic                  usb_setup_received, setup_received, usb_set_sent, set_sent;
   logic [NEndpoints-1:0] ep_out_iso, ep_in_iso;
-  logic [NEndpoints-1:0] enable_setup, enable_out, in_ep_stall, out_ep_stall;
-  logic [NEndpoints-1:0] usb_enable_setup, usb_enable_out;
+  logic [NEndpoints-1:0] enable_setup, in_ep_stall, out_ep_stall;
+  logic [NEndpoints-1:0] usb_enable_setup, usb_enable_out, ep_set_nak_on_out;
   logic [NEndpoints-1:0] usb_in_ep_stall, usb_out_ep_stall;
   logic [NEndpoints-1:0] ep_in_enable, ep_out_enable, usb_ep_in_enable, usb_ep_out_enable;
   logic [NEndpoints-1:0] in_rdy_async;
   logic [3:0]            usb_out_endpoint;
   logic                  usb_out_endpoint_val;
+  logic                  usb_use_diff_rcvr, usb_diff_rx_ok;
 
   // Endpoint enables
   always_comb begin : proc_map_ep_enable
@@ -281,8 +314,8 @@ module usbdev
   // RX enables
   always_comb begin : proc_map_rxenable
     for (int i = 0; i < NEndpoints; i++) begin
-      enable_setup[i] = reg2hw.rxenable_setup[i].q;
-      enable_out[i]   = reg2hw.rxenable_out[i].q;
+      enable_setup[i]   = reg2hw.rxenable_setup[i].q;
+      usb_enable_out[i] = reg2hw.rxenable_out[i].q;
     end
   end
 
@@ -295,12 +328,12 @@ module usbdev
   end
 
   prim_flop_2sync #(
-    .Width(4*NEndpoints)
+    .Width(3*NEndpoints)
   ) usbdev_sync_ep_cfg (
     .clk_i  (clk_usb_48mhz_i),
     .rst_ni (rst_usb_48mhz_ni),
-    .d_i    ({enable_setup, enable_out, in_ep_stall, out_ep_stall}),
-    .q_o    ({usb_enable_setup, usb_enable_out, usb_in_ep_stall, usb_out_ep_stall})
+    .d_i    ({enable_setup, in_ep_stall, out_ep_stall}),
+    .q_o    ({usb_enable_setup, usb_in_ep_stall, usb_out_ep_stall})
   );
 
   prim_flop_2sync #(
@@ -317,6 +350,7 @@ module usbdev
     for (int i = 0; i < NEndpoints; i++) begin
       ep_out_iso[i] = reg2hw.out_iso[i].q;
       ep_in_iso[i] = reg2hw.in_iso[i].q;
+      ep_set_nak_on_out[i] = reg2hw.set_nak_out[i].q;
     end
   end
 
@@ -394,6 +428,25 @@ module usbdev
     for (int i = 0; i < NEndpoints; i++) begin
       hw2reg.in_sent[i].de = set_sentbit[i];
       hw2reg.in_sent[i].d  = 1'b1;
+    end
+  end
+
+  // Clear of rxenable_out bit
+  // If so configured, for every received transaction on a given endpoint, clear
+  // the rxenable_out bit. In this configuration, hardware defaults to NAKing
+  // any subsequent transaction, so software has time to decide the next
+  // response.
+  always_comb begin
+    clear_rxenable_out = '0;
+    if (usb_rx_wvalid && usb_out_endpoint_val) begin
+      clear_rxenable_out[usb_out_endpoint] = ep_set_nak_on_out[usb_out_endpoint];
+    end
+  end
+
+  always_comb begin
+    for (int i = 0; i < NEndpoints; i++) begin
+      hw2reg.rxenable_out[i].d = 1'b0;
+      hw2reg.rxenable_out[i].de = clear_rxenable_out[i];
     end
   end
 
@@ -513,6 +566,10 @@ module usbdev
   ////////////////////////////////////////////////////////
   // USB interface -- everything is in USB clock domain //
   ////////////////////////////////////////////////////////
+  wire cfg_pinflip = reg2hw.phy_config.pinflip.q; // cdc ok: quasi-static
+  assign usb_dp_pullup_en = cfg_pinflip ? 1'b0 : usb_pullup_en;
+  assign usb_dn_pullup_en = !cfg_pinflip ? 1'b0 : usb_pullup_en;
+
 
   usbdev_usbif #(
     .NEndpoints     (NEndpoints),
@@ -532,6 +589,8 @@ module usbdev
     .usb_oe_o             (usb_tx_oe),
     .usb_d_o              (usb_tx_d),
     .usb_se0_o            (usb_tx_se0),
+    .usb_dp_o             (usb_tx_dp),
+    .usb_dn_o             (usb_tx_dn),
     .usb_sense_i          (usb_pwr_sense),
     .usb_pullup_en_o      (usb_pullup_en),
 
@@ -568,6 +627,9 @@ module usbdev
     .mem_wdata_o          (usb_mem_b_wdata),
     .mem_rdata_i          (usb_mem_b_rdata),
 
+    // time reference
+    .us_tick_i            (us_tick),
+
     // control
     .enable_i             (usb_enable),
     .devaddr_i            (usb_device_addr),
@@ -576,9 +638,11 @@ module usbdev
     .out_ep_enabled_i     (usb_ep_out_enable),
     .out_ep_iso_i         (ep_out_iso), // cdc ok, quasi-static
     .in_ep_iso_i          (ep_in_iso), // cdc ok, quasi-static
+    .diff_rx_ok_i         (usb_diff_rx_ok),
     .cfg_eop_single_bit_i (reg2hw.phy_config.eop_single_bit.q), // cdc ok: quasi-static
     .tx_osc_test_mode_i   (reg2hw.phy_config.tx_osc_test_mode.q), // cdc ok: quasi-static
-    .cfg_use_diff_rcvr_i  (reg2hw.phy_config.use_diff_rcvr.q), // cdc ok: quasi-static
+    .cfg_use_diff_rcvr_i  (usb_rx_enable_o),
+    .cfg_pinflip_i        (cfg_pinflip),
     .data_toggle_clear_i  (usb_data_toggle_clear),
     .resume_link_active_i (usb_resume_link_active),
 
@@ -1016,7 +1080,11 @@ module usbdev
   /////////////////////////////////
   // USB IO Muxing               //
   /////////////////////////////////
-  assign cio_usb_dn_en_o = cio_usb_dp_en_o;
+  logic cio_usb_oe;
+  logic usb_rx_enable;
+  assign cio_usb_dp_en_o = cio_usb_oe;
+  assign cio_usb_dn_en_o = cio_usb_oe;
+  assign usb_tx_use_d_se0_o = reg2hw.phy_config.tx_use_d_se0.q; // cdc ok: quasi-static
 
   usbdev_iomux i_usbdev_iomux (
     .clk_i                  (clk_i),
@@ -1027,7 +1095,6 @@ module usbdev
     // Register interface
     .sys_hw2reg_sense_o     (hw2reg.phy_pins_sense),
     .sys_reg2hw_drive_i     (reg2hw.phy_pins_drive),
-    .sys_reg2hw_config_i    (reg2hw.phy_config),
     .sys_usb_sense_o        (hw2reg.usbstat.sense.d),
 
     // Chip IO
@@ -1038,12 +1105,12 @@ module usbdev
     .usb_tx_se0_o           (usb_tx_se0_o),
     .usb_tx_dp_o            (cio_usb_dp_o),
     .usb_tx_dn_o            (cio_usb_dn_o),
-    .usb_tx_oe_o            (cio_usb_dp_en_o),
-    .usb_tx_use_d_se0_o     (usb_tx_use_d_se0_o),
+    .usb_tx_oe_o            (cio_usb_oe),
     .cio_usb_sense_i        (cio_sense_i),
     .usb_dp_pullup_en_o     (usb_dp_pullup_o),
     .usb_dn_pullup_en_o     (usb_dn_pullup_o),
     .usb_suspend_o          (usb_suspend_o),
+    .usb_rx_enable_o        (usb_rx_enable_o),
 
     // Internal interface
     .usb_rx_d_o             (usb_rx_d),
@@ -1051,17 +1118,54 @@ module usbdev
     .usb_rx_dn_o            (usb_rx_dn),
     .usb_tx_d_i             (usb_tx_d),
     .usb_tx_se0_i           (usb_tx_se0),
+    .usb_tx_dp_i            (usb_tx_dp),
+    .usb_tx_dn_i            (usb_tx_dn),
     .usb_tx_oe_i            (usb_tx_oe),
     .usb_pwr_sense_o        (usb_pwr_sense),
-    .usb_pullup_en_i        (usb_pullup_en),
-    .usb_suspend_i          (usb_event_link_suspend)
+    .usb_dp_pullup_en_i     (usb_dp_pullup_en),
+    .usb_dn_pullup_en_i     (usb_dn_pullup_en),
+    .usb_suspend_i          (usb_event_link_suspend),
+    .usb_rx_enable_i        (usb_rx_enable)
   );
 
+  // Differential receiver enable
+  prim_flop_2sync #(
+    .Width      (1)
+  ) usbdev_sync_rcvr_enable (
+    .clk_i  (clk_usb_48mhz_i),
+    .rst_ni (rst_usb_48mhz_ni),
+    .d_i    (reg2hw.phy_config.use_diff_rcvr.q),
+    .q_o    (usb_use_diff_rcvr)
+  );
   // enable rx only when the single-ended input is enabled and the device is
-  // not suspended.
-  // TODO(#10901): This can cause undefined behavior if this module stays
-  // powered to detect resume (instead of the AON module).
-  assign usb_rx_enable_o = reg2hw.phy_config.use_diff_rcvr.q & ~usb_suspend_o;
+  // not suspended (unless it is forced on in the I/O mux).
+  assign usb_rx_enable = usb_use_diff_rcvr & ~usb_suspend_o;
+
+  // Symbols from the differential receiver are invalid until it has finished
+  // waking up / powering on
+  // Add 1 to the specified time to account for uncertainty in the
+  // free-running counter for us_tick.
+  localparam int RcvrWakeTimeWidth = vbits(RcvrWakeTimeUs + 1);
+  logic [RcvrWakeTimeWidth-1:0] usb_rcvr_ok_counter_d, usb_rcvr_ok_counter_q;
+
+  assign usb_diff_rx_ok = (usb_rcvr_ok_counter_q == '0);
+  always_comb begin
+    // When don't need to use a differential receiver, RX is always ready
+    usb_rcvr_ok_counter_d = '0;
+    if (usb_use_diff_rcvr & !usb_rx_enable_o) begin
+      usb_rcvr_ok_counter_d = RcvrWakeTimeUs[0 +: RcvrWakeTimeWidth] + 1;
+    end else if (us_tick && (usb_rcvr_ok_counter_q > '0)) begin
+      usb_rcvr_ok_counter_d = usb_rcvr_ok_counter_q - 1;
+    end
+  end
+
+  always_ff @(posedge clk_usb_48mhz_i or negedge rst_usb_48mhz_ni) begin
+    if (!rst_usb_48mhz_ni) begin
+      usb_rcvr_ok_counter_q <= RcvrWakeTimeUs[0 +: RcvrWakeTimeWidth] + 1;
+    end else begin
+      usb_rcvr_ok_counter_q <= usb_rcvr_ok_counter_d;
+    end
+  end
 
   /////////////////////////////////////////
   // SOF Reference for Clock Calibration //

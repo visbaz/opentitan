@@ -38,6 +38,8 @@ module ibex_core import ibex_pkg::*; #(
   parameter bit          DummyInstructions = 1'b0,
   parameter bit          RegFileECC        = 1'b0,
   parameter int unsigned RegFileDataWidth  = 32,
+  parameter bit          MemECC            = 1'b0,
+  parameter int unsigned MemDataWidth      = MemECC ? 32 + 7 : 32,
   parameter int unsigned DmHaltAddr        = 32'h1A110800,
   parameter int unsigned DmExceptionAddr   = 32'h1A110808
 ) (
@@ -53,7 +55,7 @@ module ibex_core import ibex_pkg::*; #(
   input  logic                         instr_gnt_i,
   input  logic                         instr_rvalid_i,
   output logic [31:0]                  instr_addr_o,
-  input  logic [31:0]                  instr_rdata_i,
+  input  logic [MemDataWidth-1:0]      instr_rdata_i,
   input  logic                         instr_err_i,
 
   // Data memory interface
@@ -63,8 +65,8 @@ module ibex_core import ibex_pkg::*; #(
   output logic                         data_we_o,
   output logic [3:0]                   data_be_o,
   output logic [31:0]                  data_addr_o,
-  output logic [31:0]                  data_wdata_o,
-  input  logic [31:0]                  data_rdata_i,
+  output logic [MemDataWidth-1:0]      data_wdata_o,
+  input  logic [MemDataWidth-1:0]      data_rdata_i,
   input  logic                         data_err_i,
 
   // Register file interface
@@ -101,6 +103,8 @@ module ibex_core import ibex_pkg::*; #(
   // Debug Interface
   input  logic                         debug_req_i,
   output crash_dump_t                  crash_dump_o,
+  // SEC_CM: EXCEPTION.CTRL_FLOW.LOCAL_ESC
+  // SEC_CM: EXCEPTION.CTRL_FLOW.GLOBAL_ESC
   output logic                         double_fault_seen_o,
 
   // RISC-V Formal Interface
@@ -137,14 +141,17 @@ module ibex_core import ibex_pkg::*; #(
 `endif
 
   // CPU Control Signals
+  // SEC_CM: FETCH.CTRL.LC_GATED
   input  fetch_enable_t                fetch_enable_i,
   output logic                         alert_minor_o,
-  output logic                         alert_major_o,
+  output logic                         alert_major_internal_o,
+  output logic                         alert_major_bus_o,
   output logic                         icache_inval_o,
   output logic                         core_busy_o
 );
 
   localparam int unsigned PMP_NUM_CHAN      = 3;
+  // SEC_CM: CORE.DATA_REG_SW.SCA
   localparam bit          DataIndTiming     = SecureIbex;
   localparam bit          PCIncrCheck       = SecureIbex;
   localparam bit          ShadowCSR         = 1'b0;
@@ -177,6 +184,7 @@ module ibex_core import ibex_pkg::*; #(
   logic [31:0] dummy_instr_seed;
   logic        icache_enable;
   logic        icache_inval;
+  logic        icache_ecc_error;
   logic        pc_mismatch_alert;
   logic        csr_shadow_err;
 
@@ -189,8 +197,10 @@ module ibex_core import ibex_pkg::*; #(
   exc_pc_sel_e exc_pc_mux_id;                  // Mux selector for exception PC
   exc_cause_e  exc_cause;                      // Exception cause
 
+  logic        instr_intg_err;
   logic        lsu_load_err;
   logic        lsu_store_err;
+  logic        lsu_load_intg_err;
 
   // LSU signals
   logic        lsu_addr_incr_req;
@@ -367,10 +377,12 @@ module ibex_core import ibex_pkg::*; #(
     .TagSizeECC       (TagSizeECC),
     .LineSizeECC      (LineSizeECC),
     .PCIncrCheck      (PCIncrCheck),
-    .ResetAll          ( ResetAll          ),
-    .RndCnstLfsrSeed   ( RndCnstLfsrSeed   ),
-    .RndCnstLfsrPerm   ( RndCnstLfsrPerm   ),
-    .BranchPredictor  (BranchPredictor)
+    .ResetAll         (ResetAll),
+    .RndCnstLfsrSeed  (RndCnstLfsrSeed),
+    .RndCnstLfsrPerm  (RndCnstLfsrPerm),
+    .BranchPredictor  (BranchPredictor),
+    .MemECC           (MemECC),
+    .MemDataWidth     (MemDataWidth)
   ) if_stage_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),
@@ -379,12 +391,13 @@ module ibex_core import ibex_pkg::*; #(
     .req_i      (instr_req_gated),  // instruction request control
 
     // instruction cache interface
-    .instr_req_o    (instr_req_o),
-    .instr_addr_o   (instr_addr_o),
-    .instr_gnt_i    (instr_gnt_i),
-    .instr_rvalid_i (instr_rvalid_i),
-    .instr_rdata_i  (instr_rdata_i),
-    .instr_err_i    (instr_err_i),
+    .instr_req_o       (instr_req_o),
+    .instr_addr_o      (instr_addr_o),
+    .instr_gnt_i       (instr_gnt_i),
+    .instr_rvalid_i    (instr_rvalid_i),
+    .instr_rdata_i     (instr_rdata_i),
+    .instr_bus_err_i   (instr_err_i),
+    .instr_intg_err_o  (instr_intg_err),
 
     .ic_tag_req_o      (ic_tag_req_o),
     .ic_tag_write_o    (ic_tag_write_o),
@@ -428,6 +441,7 @@ module ibex_core import ibex_pkg::*; #(
     .dummy_instr_seed_i    (dummy_instr_seed),
     .icache_enable_i       (icache_enable),
     .icache_inval_i        (icache_inval),
+    .icache_ecc_error_o    (icache_ecc_error),
 
     // branch targets
     .branch_target_ex_i(branch_target_ex),
@@ -461,6 +475,7 @@ module ibex_core import ibex_pkg::*; #(
   if (SecureIbex) begin : g_instr_req_gated_secure
     // For secure Ibex fetch_enable_i must be a specific multi-bit pattern to enable instruction
     // fetch
+    // SEC_CM: FETCH.CTRL.LC_GATED
     assign instr_req_gated = instr_req_int & (fetch_enable_i == FetchEnableOn);
   end else begin : g_instr_req_gated_non_secure
     // For non secure Ibex only the bottom bit of fetch enable is considered
@@ -685,7 +700,10 @@ module ibex_core import ibex_pkg::*; #(
   assign data_req_o   = data_req_out & ~pmp_req_err[PMP_D];
   assign lsu_resp_err = lsu_load_err | lsu_store_err;
 
-  ibex_load_store_unit load_store_unit_i (
+  ibex_load_store_unit #(
+    .MemECC(MemECC),
+    .MemDataWidth(MemDataWidth)
+  ) load_store_unit_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),
 
@@ -693,14 +711,14 @@ module ibex_core import ibex_pkg::*; #(
     .data_req_o    (data_req_out),
     .data_gnt_i    (data_gnt_i),
     .data_rvalid_i (data_rvalid_i),
-    .data_err_i    (data_err_i),
+    .data_bus_err_i(data_err_i),
     .data_pmp_err_i(pmp_req_err[PMP_D]),
 
-    .data_addr_o (data_addr_o),
-    .data_we_o   (data_we_o),
-    .data_be_o   (data_be_o),
-    .data_wdata_o(data_wdata_o),
-    .data_rdata_i(data_rdata_i),
+    .data_addr_o      (data_addr_o),
+    .data_we_o        (data_we_o),
+    .data_be_o        (data_be_o),
+    .data_wdata_o     (data_wdata_o),
+    .data_rdata_i     (data_rdata_i),
 
     // signals to/from ID/EX stage
     .lsu_we_i      (lsu_we),
@@ -722,8 +740,9 @@ module ibex_core import ibex_pkg::*; #(
     .lsu_resp_valid_o(lsu_resp_valid),
 
     // exception signals
-    .load_err_o (lsu_load_err),
-    .store_err_o(lsu_store_err),
+    .load_err_o     (lsu_load_err),
+    .store_err_o    (lsu_store_err),
+    .load_intg_err_o(lsu_load_intg_err),
 
     .busy_o(lsu_busy),
 
@@ -784,6 +803,7 @@ module ibex_core import ibex_pkg::*; #(
 
   if (RegFileECC) begin : gen_regfile_ecc
 
+    // SEC_CM: DATA_REG_SW.INTEGRITY
     logic [1:0] rf_ecc_err_a, rf_ecc_err_b;
     logic       rf_ecc_err_a_id, rf_ecc_err_b_id;
 
@@ -846,11 +866,12 @@ module ibex_core import ibex_pkg::*; #(
   ///////////////////
 
   // Minor alert - core is in a recoverable state
-  // TODO add I$ ECC errors here
-  assign alert_minor_o = 1'b0;
+  assign alert_minor_o = icache_ecc_error;
 
-  // Major alert - core is unrecoverable
-  assign alert_major_o = rf_ecc_err_comb | pc_mismatch_alert | csr_shadow_err;
+  // Major internal alert - core is unrecoverable
+  assign alert_major_internal_o = rf_ecc_err_comb | pc_mismatch_alert | csr_shadow_err;
+  // Major bus alert
+  assign alert_major_bus_o = lsu_load_intg_err | instr_intg_err;
 
   // Explict INC_ASSERT block to avoid unused signal lint warnings were asserts are not included
   `ifdef INC_ASSERT

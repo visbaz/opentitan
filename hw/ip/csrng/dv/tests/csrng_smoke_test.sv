@@ -10,7 +10,10 @@ class csrng_smoke_test extends csrng_base_test;
   function void configure_env();
     super.configure_env();
 
+    cfg.use_invalid_mubi          = 0;
+
     `DV_CHECK_RANDOMIZE_FATAL(cfg)
+
     `uvm_info(`gfn, $sformatf("%s", cfg.convert2string()), UVM_LOW)
   endfunction
 endclass : csrng_smoke_test

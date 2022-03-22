@@ -108,6 +108,12 @@
       tests: []
     }
     {
+      name: sec_cm_ctrl_fsm_consistency
+      desc: "Verify the countermeasure(s) CTRL.FSM.CONSISTENCY."
+      milestone: V2S
+      tests: []
+    }
+    {
       name: sec_cm_ctrl_fsm_global_esc
       desc: "Verify the countermeasure(s) CTRL.FSM.GLOBAL_ESC."
       milestone: V2S
@@ -132,8 +138,32 @@
       tests: []
     }
     {
+      name: sec_cm_kmac_if_cmd_ctrl_consistency
+      desc: "Verify the countermeasure(s) KMAC_IF_CMD.CTRL.CONSISTENCY."
+      milestone: V2S
+      tests: []
+    }
+    {
+      name: sec_cm_kmac_if_done_ctrl_consistency
+      desc: "Verify the countermeasure(s) KMAC_IF_DONE.CTRL.CONSISTENCY."
+      milestone: V2S
+      tests: []
+    }
+    {
       name: sec_cm_reseed_ctr_redun
       desc: "Verify the countermeasure(s) RESEED.CTR.REDUN."
+      milestone: V2S
+      tests: []
+    }
+    {
+      name: sec_cm_side_load_sel_ctrl_consistency
+      desc: "Verify the countermeasure(s) SIDE_LOAD_SEL.CTRL.CONSISTENCY."
+      milestone: V2S
+      tests: []
+    }
+    {
+      name: sec_cm_ctrl_key_integrity
+      desc: "Verify the countermeasure(s) CTRL.KEY.INTEGRITY."
       milestone: V2S
       tests: []
     }

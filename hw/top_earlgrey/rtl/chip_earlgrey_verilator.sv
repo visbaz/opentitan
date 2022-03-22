@@ -49,9 +49,9 @@ module chip_earlgrey_verilator (
   logic IO_JTCK, IO_JTMS, IO_JTRST_N, IO_JTDI, IO_JTDO;
 
   // TODO: instantiate padring and route these signals through that module
-  logic [pinmux_pkg::NDioPads-1:0] dio_in;
-  logic [pinmux_pkg::NDioPads-1:0] dio_out;
-  logic [pinmux_pkg::NDioPads-1:0] dio_oe;
+  logic [pinmux_reg_pkg::NDioPads-1:0] dio_in;
+  logic [pinmux_reg_pkg::NDioPads-1:0] dio_out;
+  logic [pinmux_reg_pkg::NDioPads-1:0] dio_oe;
 
   always_comb begin : assign_dio_in
     dio_in = '0;
@@ -90,9 +90,9 @@ module chip_earlgrey_verilator (
   assign cio_spi_device_sdo_d2p_o = dio_out[DioSpiDeviceSd1];
   assign cio_spi_device_sdo_en_d2p_o = dio_oe[DioSpiDeviceSd1];
 
-  logic [pinmux_pkg::NMioPads-1:0] mio_in;
-  logic [pinmux_pkg::NMioPads-1:0] mio_out;
-  logic [pinmux_pkg::NMioPads-1:0] mio_oe;
+  logic [pinmux_reg_pkg::NMioPads-1:0] mio_in;
+  logic [pinmux_reg_pkg::NMioPads-1:0] mio_out;
+  logic [pinmux_reg_pkg::NMioPads-1:0] mio_oe;
 
   always_comb begin : assign_mio_in
     mio_in = '0;
@@ -221,8 +221,8 @@ module chip_earlgrey_verilator (
   prim_mubi_pkg::mubi4_t all_clk_byp_ack;
   prim_mubi_pkg::mubi4_t io_clk_byp_req;
   prim_mubi_pkg::mubi4_t io_clk_byp_ack;
+  prim_mubi_pkg::mubi4_t div_step_down_req;
   logic hi_speed_sel;
-
 
   // DFT connections
   logic scan_en;
@@ -334,7 +334,7 @@ module chip_earlgrey_verilator (
     .clk_src_io_en_i       ( base_ast_pwr.io_clk_en ),
     .clk_src_io_o          ( ast_base_clks.clk_io ),
     .clk_src_io_val_o      ( ast_base_pwr.io_clk_val ),
-    .clk_src_io_48m_o      (  ),
+    .clk_src_io_48m_o      ( div_step_down_req ),
     // usb source clock
     .usb_ref_pulse_i       ( usb_ref_pulse ),
     .usb_ref_val_i         ( usb_ref_val ),
@@ -462,6 +462,7 @@ module chip_earlgrey_verilator (
     .io_clk_byp_req_o             ( io_clk_byp_req             ),
     .io_clk_byp_ack_i             ( io_clk_byp_ack             ),
     .hi_speed_sel_o               ( hi_speed_sel               ),
+    .div_step_down_req_i          ( div_step_down_req          ),
     .ast2pinmux_i                 ( ast2pinmux                 ),
     .ast_init_done_i              ( ast_init_done              ),
 

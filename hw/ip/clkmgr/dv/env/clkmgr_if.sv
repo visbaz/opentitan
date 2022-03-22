@@ -11,6 +11,7 @@ interface clkmgr_if (
   input logic rst_main_n,
   input logic rst_usb_n
 );
+  import uvm_pkg::*;
   import clkmgr_env_pkg::*;
 
   // The ports to the dut side.
@@ -18,7 +19,7 @@ interface clkmgr_if (
   localparam int LcTxTWidth = $bits(lc_ctrl_pkg::lc_tx_t);
 
   // Encodes the transactional units that are idle.
-  hintables_t idle_i;
+  mubi_hintables_t idle_i;
 
   // pwrmgr req contains ip_clk_en, set to enable the gated clocks.
   pwrmgr_pkg::pwr_clk_req_t pwr_i;
@@ -42,6 +43,8 @@ interface clkmgr_if (
   // clkmgr clock bypass request for all clocks and ast ack: triggered by software.
   prim_mubi_pkg::mubi4_t all_clk_byp_req;
   prim_mubi_pkg::mubi4_t all_clk_byp_ack;
+
+  prim_mubi_pkg::mubi4_t div_step_down_req;
 
   prim_mubi_pkg::mubi4_t jitter_en_o;
   clkmgr_pkg::clkmgr_out_t clocks_o;
@@ -80,9 +83,8 @@ interface clkmgr_if (
 
   prim_mubi_pkg::mubi4_t extclk_ctrl_csr_step_down;
   always_comb begin
-     extclk_ctrl_csr_step_down = (`CLKMGR_HIER.hi_speed_sel_o == prim_mubi_pkg::MuBi4False) ?
-                                 prim_mubi_pkg::MuBi4True :
-                                 prim_mubi_pkg::MuBi4False;
+    extclk_ctrl_csr_step_down = prim_mubi_pkg::mubi4_t'(
+        `CLKMGR_HIER.reg2hw.extclk_ctrl.hi_speed_sel.q);
   end
 
   prim_mubi_pkg::mubi4_t jitter_enable_csr;
@@ -155,7 +157,7 @@ interface clkmgr_if (
   end
   always_comb usb_timeout_err = `CLKMGR_HIER.usb_timeout_err;
 
-  function automatic void update_idle(hintables_t value);
+  function automatic void update_idle(mubi_hintables_t value);
     idle_i = value;
   endfunction
 
@@ -189,6 +191,12 @@ interface clkmgr_if (
     all_clk_byp_ack = value;
   endfunction
 
+  function automatic void update_div_step_down_req(prim_mubi_pkg::mubi4_t value);
+    `uvm_info("clkmgr_if", $sformatf("In clkmgr_if update_div_step_down_req with %b", value),
+              UVM_MEDIUM)
+    div_step_down_req = value;
+  endfunction
+
   function automatic void update_io_clk_byp_ack(prim_mubi_pkg::mubi4_t value);
     io_clk_byp_ack = value;
   endfunction
@@ -210,7 +218,7 @@ interface clkmgr_if (
     endcase
   endfunction
 
-  task automatic init(hintables_t idle, prim_mubi_pkg::mubi4_t scanmode,
+  task automatic init(mubi_hintables_t idle, prim_mubi_pkg::mubi4_t scanmode,
                       lc_ctrl_pkg::lc_tx_t lc_debug_en = lc_ctrl_pkg::Off,
                       lc_ctrl_pkg::lc_tx_t lc_clk_byp_req = lc_ctrl_pkg::Off);
     `uvm_info("clkmgr_if", "In clkmgr_if init", UVM_MEDIUM)
@@ -239,7 +247,7 @@ interface clkmgr_if (
       ip_clk_en_div4_ffs <= {ip_clk_en_div4_ffs[PIPELINE_DEPTH-2:0], pwr_i.io_ip_clk_en};
     end else begin
       clk_enable_div4_ffs <= '0;
-      ip_clk_en_div4_ffs <= '0;
+      ip_clk_en_div4_ffs  <= '0;
     end
   end
   clocking peri_div4_cb @(posedge clocks_o.clk_io_div4_powerup or negedge rst_io_n);

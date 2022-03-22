@@ -10,7 +10,6 @@ from .isa import OTBNInsn
 from .state import OTBNState, FsmState
 from .stats import ExecutionStats
 from .trace import Trace
-from .ext_regs import TraceExtRegChange, ExtRegChange
 
 
 # A dictionary that defines a function of the form "address -> from -> to". If
@@ -18,6 +17,10 @@ from .ext_regs import TraceExtRegChange, ExtRegChange
 # warps[PC][cnt] = new_cnt means that we should warp the current count to
 # new_cnt.
 LoopWarps = Dict[int, Dict[int, int]]
+
+# The return type of the Step function: a possible instruction that was
+# executed, together with a list of changes.
+StepRes = Tuple[Optional[OTBNInsn], List[Trace]]
 
 
 class OTBNSim:
@@ -31,6 +34,7 @@ class OTBNSim:
 
     def load_program(self, program: List[OTBNInsn]) -> None:
         self.program = program.copy()
+        self.state.clear_imem_invalidation()
 
     def add_loop_warp(self, addr: int, from_cnt: int, to_cnt: int) -> None:
         '''Add a new loop warp to the simulation'''
@@ -83,6 +87,11 @@ class OTBNSim:
                   verbose: bool,
                   fetch_next: bool) -> List[Trace]:
         '''This is run on a stall cycle'''
+        if self.state.pending_halt:
+            # We've reached the end of the run because of some error. Register
+            # it on the next cycle.
+            self.state.stop()
+
         changes = self.state.changes()
         self.state.commit(sim_stalled=True)
         if fetch_next:
@@ -91,6 +100,7 @@ class OTBNSim:
             self.stats.record_stall()
         if verbose:
             self._print_trace(self.state.pc, '(stall)', changes)
+
         return changes
 
     def _on_retire(self,
@@ -103,7 +113,9 @@ class OTBNSim:
         if self.stats is not None:
             self.stats.record_insn(insn, self.state)
 
-        if self.state.pending_halt:
+        halting = self.state.pending_halt
+
+        if halting:
             # We've reached the end of the run (either because of an ECALL
             # instruction or an error).
             self.state.stop()
@@ -114,10 +126,10 @@ class OTBNSim:
         pc_before = self.state.pc
         self.state.commit(sim_stalled=False)
 
-        # Fetch the next instruction unless this instruction had
-        # `has_fetch_stall` set, in which case we inject a single cycle stall.
-        self._next_insn = (None if insn.has_fetch_stall
-                           else self._fetch(self.state.pc))
+        # Fetch the next instruction unless we're done or this instruction had
+        # `has_fetch_stall` set (in which case we inject a single cycle stall).
+        no_fetch = halting or insn.has_fetch_stall
+        self._next_insn = None if no_fetch else self._fetch(self.state.pc)
 
         disasm = insn.disassemble(pc_before)
         if verbose:
@@ -125,7 +137,7 @@ class OTBNSim:
 
         return changes
 
-    def step(self, verbose: bool) -> Tuple[Optional[OTBNInsn], List[Trace]]:
+    def step(self, verbose: bool) -> StepRes:
         '''Run a single cycle.
 
         Returns the instruction, together with a list of the architectural
@@ -133,53 +145,75 @@ class OTBNSim:
         returns no instruction and no changes.
 
         '''
-        if not self.state.running():
-            changes = self.state.changes()
-            self.state.commit(sim_stalled=True)
-            return (None, changes)
+        fsm_state = self.state.get_fsm_state()
 
-        if self.state.fsm_state == FsmState.PRE_EXEC:
-            # Zero INSN_CNT the cycle after we are told to start (and every
-            # cycle after that until we start executing instructions, but that
-            # doesn't really matter)
-            changes = self._on_stall(verbose, fetch_next=False)
-            changes += [TraceExtRegChange('RND_REQ',
-                                          ExtRegChange('=', 0, True, 0))]
+        # Pairs: (stepper, handles_injected_err). If handles_injected_err is
+        # False then the generic code here will deal with any pending errors in
+        # self.state.injected_err_bits. If True, then we expect the stepper
+        # function to handle them.
+        steppers = {
+            FsmState.IDLE: (self._step_idle, False),
+            FsmState.PRE_EXEC: (self._step_pre_exec, False),
+            FsmState.FETCH_WAIT: (self._step_fetch_wait, False),
+            FsmState.EXEC: (self._step_exec, True),
+            FsmState.WIPING_GOOD: (self._step_wiping, False),
+            FsmState.WIPING_BAD: (self._step_wiping, False),
+            FsmState.LOCKED: (self._step_idle, False)
+        }
+
+        stepper, handles_injected_err = steppers[fsm_state]
+
+        if not handles_injected_err:
+            self.state.take_injected_err_bits()
+
+        return stepper(verbose)
+
+    def _step_idle(self, verbose: bool) -> StepRes:
+        '''Step the simulation when OTBN is IDLE or LOCKED'''
+        if self.state.pending_halt:
+            # We've reached the end of the run because of some error. Register
+            # it on the next cycle.
+            self.state.stop()
+
+        changes = self.state.changes()
+        self.state.commit(sim_stalled=True)
+        return (None, changes)
+
+    def _step_pre_exec(self, verbose: bool) -> StepRes:
+        '''Step the simulation in the PRE_EXEC state
+
+        In this state, we're waiting for a URND seed. Once that appears, we
+        switch to FETCH_WAIT.
+        '''
+        if self.state.wsrs.URND.running:
+            self.state.set_fsm_state(FsmState.FETCH_WAIT)
+
+        changes = self._on_stall(verbose, fetch_next=False)
+
+        # Zero INSN_CNT the cycle after we are told to start
+        if self.state.ext_regs.read('INSN_CNT', True) != 0:
             self.state.ext_regs.write('INSN_CNT', 0, True)
-            return (None, changes)
 
-        # If we are not in PRE_EXEC, then we have a valid URND seed. So we
-        # should step URND regardless of whether we're actually executing
-        # instructions.
-        self.state.wsrs.URND.commit()
+        return (None, changes)
+
+    def _step_fetch_wait(self, verbose: bool) -> StepRes:
+        '''Step the simulation in the FETCH_WAIT state
+
+        This state lasts a single cycle while we fetch our first instruction
+        and then jump to EXEC.
+        '''
         self.state.wsrs.URND.step()
+        self.state.set_fsm_state(FsmState.EXEC)
+        changes = self._on_stall(verbose, fetch_next=False)
+        return (None, changes)
 
-        if self.state.fsm_state == FsmState.FETCH_WAIT:
-            changes = self._on_stall(verbose, fetch_next=False)
-            return (None, changes)
-
-        if self.state.fsm_state in [FsmState.WIPING_GOOD, FsmState.WIPING_BAD]:
-            assert self.state.wipe_cycles > 0
-            self.state.wipe_cycles -= 1
-
-            # Clear the WIPE_START register if it was set
-            if self.state.ext_regs.read('WIPE_START', True):
-                self.state.ext_regs.write('WIPE_START', 0, True)
-
-            # Wipe all registers and set STATUS on the penultimate cycle.
-            if self.state.wipe_cycles == 1:
-                next_status = (Status.IDLE
-                               if self.state.fsm_state == FsmState.WIPING_GOOD
-                               else Status.LOCKED)
-                self.state.ext_regs.write('STATUS', next_status, True)
-                self.state.wipe()
-
-            return (None, self._on_stall(verbose, fetch_next=False))
-
-        assert self.state.fsm_state == FsmState.EXEC
+    def _step_exec(self, verbose: bool) -> StepRes:
+        '''Step the simulation when executing code'''
+        self.state.wsrs.URND.step()
 
         insn = self._next_insn
         if insn is None:
+            self.state.take_injected_err_bits()
             return (None, self._on_stall(verbose, fetch_next=True))
 
         # Whether or not we're currently executing an instruction, we fetched
@@ -210,9 +244,46 @@ class OTBNSim:
             except StopIteration:
                 self._execute_generator = None
 
+        # Handle any pending injected error. Note that this has to run after
+        # we've executed any instruction, to ensure we get a trace entry for
+        # that instruction before it gets shot down.
+        self.state.take_injected_err_bits()
+
         sim_stalled = (self._execute_generator is not None)
         if not sim_stalled:
             return (insn, self._on_retire(verbose, insn))
+
+        return (None, self._on_stall(verbose, fetch_next=False))
+
+    def _step_wiping(self, verbose: bool) -> StepRes:
+        '''Step the simulation when wiping'''
+        assert self.state.wipe_cycles > 0
+        self.state.wipe_cycles -= 1
+
+        is_good = self.state.get_fsm_state() == FsmState.WIPING_GOOD
+
+        # Clear the WIPE_START register if it was set. In this situation, we
+        # know we're on the first cycle of the wipe, which is also where we
+        # zero INSN_CNT if we're in state WIPING_BAD.
+        if self.state.ext_regs.read('WIPE_START', True):
+            self.state.ext_regs.write('WIPE_START', 0, True)
+            if not is_good:
+                self.state.ext_regs.write('INSN_CNT', 0, True)
+
+        # Wipe all registers and set STATUS on the penultimate cycle.
+        if self.state.wipe_cycles == 1:
+            next_status = Status.IDLE if is_good else Status.LOCKED
+            self.state.ext_regs.write('STATUS', next_status, True)
+            self.state.wipe()
+
+        # On the final cycle, set the next state to IDLE or LOCKED.
+        if self.state.wipe_cycles == 0:
+            next_state = FsmState.IDLE if is_good else FsmState.LOCKED
+            self.state.set_fsm_state(next_state)
+
+            # Also, set wipe_cycles to an invalid value to make really sure
+            # we've left the wiping code.
+            self.wipe_cycles = -1
 
         return (None, self._on_stall(verbose, fetch_next=False))
 
@@ -226,4 +297,4 @@ class OTBNSim:
 
     def on_lc_escalation(self) -> None:
         '''React to a lifecycle controller escalation signal'''
-        self.state.stop_at_end_of_cycle(ErrBits.LIFECYCLE_ESCALATION)
+        self.state.injected_err_bits |= ErrBits.LIFECYCLE_ESCALATION

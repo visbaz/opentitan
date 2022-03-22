@@ -32,8 +32,14 @@ module usb_fs_nb_pe #(
 
   input  logic                   cfg_eop_single_bit_i, // 1: detect a single SE0 bit as EOP
   input  logic                   cfg_use_diff_rcvr_i, // 1: use usb_d_i from a differential receiver
+  input  logic                   cfg_pinflip_i, // 1: USB-side D+ and D- pins are flipped.
+                                                // Change values in logic to accommodate.
   input  logic                   tx_osc_test_mode_i, // Oscillator test mode (constantly output JK)
   input  logic [NumOutEps-1:0]   data_toggle_clear_i, // Clear the data toggles for an EP
+  input  logic                   diff_rx_ok_i, // 1: received differential data symbols are valid.
+                                               // Set low if K and J symbols might be invalid, such
+                                               // as when an external differential receiver is
+                                               // powering on.
 
   ////////////////////////////
   // USB Endpoint Interface //
@@ -76,7 +82,7 @@ module usb_fs_nb_pe #(
   output logic [10:0]            frame_index_o,
 
   // RX line status
-  output logic                   rx_jjj_det_o,
+  output logic                   rx_idle_det_o,
   output logic                   rx_j_det_o,
 
   // RX errors
@@ -96,6 +102,8 @@ module usb_fs_nb_pe #(
   ///////////////////////////////////////
   output logic                   usb_d_o,
   output logic                   usb_se0_o,
+  output logic                   usb_dp_o,
+  output logic                   usb_dn_o,
   output logic                   usb_oe_o
 );
 
@@ -234,6 +242,8 @@ module usb_fs_nb_pe #(
     .link_reset_i           (link_reset_i),
     .cfg_eop_single_bit_i   (cfg_eop_single_bit_i),
     .cfg_use_diff_rcvr_i    (cfg_use_diff_rcvr_i),
+    .cfg_pinflip_i          (cfg_pinflip_i),
+    .diff_rx_ok_i           (diff_rx_ok_i),
     .usb_d_i                (usb_d_i),
     .usb_dp_i               (usb_dp_i),
     .usb_dn_i               (usb_dn_i),
@@ -248,7 +258,7 @@ module usb_fs_nb_pe #(
     .rx_data_put_o          (rx_data_put),
     .rx_data_o              (rx_data),
     .valid_packet_o         (rx_pkt_valid),
-    .rx_jjj_det_o           (rx_jjj_det_o),
+    .rx_idle_det_o          (rx_idle_det_o),
     .rx_j_det_o             (rx_j_det_o),
     .crc_error_o            (rx_crc_err_o),
     .pid_error_o            (rx_pid_err_o),
@@ -273,10 +283,13 @@ module usb_fs_nb_pe #(
     .clk_i                  (clk_48mhz_i),
     .rst_ni                 (rst_ni),
     .link_reset_i           (link_reset_i),
+    .cfg_pinflip_i          (cfg_pinflip_i),
     .tx_osc_test_mode_i     (tx_osc_test_mode_i),
     .bit_strobe_i           (bit_strobe),
     .usb_d_o                (usb_d_o),
     .usb_se0_o              (usb_se0_o),
+    .usb_dp_o               (usb_dp_o),
+    .usb_dn_o               (usb_dn_o),
     .usb_oe_o               (usb_oe),
     .pkt_start_i            (tx_pkt_start),
     .pkt_end_o              (tx_pkt_end),
@@ -285,4 +298,12 @@ module usb_fs_nb_pe #(
     .tx_data_get_o          (tx_data_get),
     .tx_data_i              (tx_data)
   );
+
+  ////////////////
+  // Assertions //
+  ////////////////
+  `ASSERT_INIT(ParamNumEpsOutAndInEqual, NumOutEps == NumInEps)
+  `ASSERT_INIT(ParamNumOutEpsValid, (NumOutEps > 0) && (NumOutEps <= 16))
+  `ASSERT_INIT(ParamNumInEpsValid, (NumInEps > 0) && (NumInEps <= 16))
+  `ASSERT_INIT(ParamMaxPktSizeByteValid, (MaxPktSizeByte >= 8) && (MaxPktSizeByte <= 64))
 endmodule

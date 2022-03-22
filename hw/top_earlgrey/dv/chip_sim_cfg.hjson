@@ -27,6 +27,7 @@
   sim_tops: ["clkmgr_bind",
              "pwrmgr_bind",
              "rstmgr_bind",
+             "top_earlgrey_bind",
              "xbar_main_bind",
              "xbar_peri_bind"]
 
@@ -206,11 +207,23 @@
   // This allows an arbitrary number of SW images to be supplied to the TB.
   tests: [
     {
+      name: chip_sw_example_flash
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["sw/device/tests/example_test_from_flash:1"]
+      en_run_modes: ["sw_test_mode_test_rom"]
+    }
+    {
+      name: chip_sw_example_rom
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["sw/device/tests/example_test_from_rom:0"]
+      en_run_modes: ["sw_test_mode_common"]
+    }
+    {
       name: chip_sw_sleep_pwm_pulses
       uvm_test_seq: chip_sw_pwm_pulses_vseq
-      sw_images: ["sw/device/tests/pwm_test:1"]
+      sw_images: ["sw/device/tests/sleep_pwm_pulses_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
-      run_opts: ["+sw_test_timeout_ns=4000000"]
+      run_opts: ["+sw_test_timeout_ns=11000000"]
     }
     {
       name: chip_sw_uart_tx_rx
@@ -287,9 +300,21 @@
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
+      name: chip_sw_flash_ctrl_lc_rw_en
+      uvm_test_seq: chip_sw_flash_ctrl_lc_rw_en_vseq
+      sw_images: ["sw/device/tests/flash_ctrl_lc_rw_en_test:1"]
+      en_run_modes: ["sw_test_mode_test_rom"]
+    }
+    {
       name: chip_sw_flash_ctrl_access
       uvm_test_seq: chip_sw_base_vseq
       sw_images: ["sw/device/tests/flash_ctrl_test:1"]
+      en_run_modes: ["sw_test_mode_test_rom"]
+    }
+    {
+      name: chip_sw_flash_ctrl_idle_low_power
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["sw/device/tests/flash_ctrl_idle_low_power_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
@@ -389,31 +414,43 @@
       run_opts: ["+sw_test_timeout_ns=22000000"]
     }
     {
-      name: chip_sw_kmac_mode_cshake_test
+      name: chip_sw_hmac_enc_irq
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["sw/device/tests/hmac_enc_irq_test:1"]
+      en_run_modes: ["sw_test_mode_test_rom"]
+    }
+    {
+      name: chip_sw_hmac_enc_test
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["sw/device/tests/hmac_enc_test:1"]
+      en_run_modes: ["sw_test_mode_test_rom"]
+    }
+    {
+      name: chip_sw_kmac_mode_cshake
       uvm_test_seq: chip_sw_base_vseq
       sw_images: ["sw/device/tests/kmac_mode_cshake_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
-      name: chip_sw_kmac_mode_kmac_test
+      name: chip_sw_kmac_mode_kmac
       uvm_test_seq: chip_sw_base_vseq
       sw_images: ["sw/device/tests/kmac_mode_kmac_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
-      name: chip_sw_kmac_app_rom_test
+      name: chip_sw_kmac_app_rom
       uvm_test_seq: chip_sw_base_vseq
       sw_images: ["sw/device/tests/kmac_app_rom_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
-      name: chip_sw_kmac_idle_test
+      name: chip_sw_kmac_idle
       uvm_test_seq: chip_sw_base_vseq
       sw_images: ["sw/device/tests/kmac_idle_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
-      name: chip_sw_rom_ctrl_integrity_check_test
+      name: chip_sw_rom_ctrl_integrity_check
       uvm_test_seq: chip_sw_rom_ctrl_integrity_check_vseq
       sw_images: ["sw/device/tests/rom_ctrl_integrity_check_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
@@ -458,11 +495,17 @@
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
-      name: chip_sw_clkmgr_peri_off
+      name: chip_sw_clkmgr_off_peri
       uvm_test_seq: chip_sw_base_vseq
-      sw_images: ["sw/device/tests/clkmgr_peri_off_test:1"]
+      sw_images: ["sw/device/tests/clkmgr_off_peri_test:1"]
       en_run_modes: ["sw_test_mode_test_rom"]
       run_opts: ["+sw_test_timeout_ns=7000000"]
+    }
+    {
+      name: chip_sw_clkmgr_external_clk_src_for_sw
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["sw/device/tests/clkmgr_external_clk_src_for_sw_test:1"]
+      en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
       name: chip_sw_clkmgr_jitter

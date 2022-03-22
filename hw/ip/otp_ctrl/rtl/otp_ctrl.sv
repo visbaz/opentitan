@@ -411,13 +411,14 @@ module otp_ctrl
 
   // Status and error reporting CSRs, error interrupt generation and alerts.
   otp_err_e [NumPart+1:0] part_error;
+  logic [NumAgents-1:0] part_fsm_err;
   logic [NumPart+1:0] part_errors_reduced;
   logic otp_operation_done, otp_error;
   logic fatal_macro_error_d, fatal_macro_error_q;
   logic fatal_check_error_d, fatal_check_error_q;
   logic fatal_bus_integ_error_d, fatal_bus_integ_error_q;
   logic chk_pending, chk_timeout;
-  logic lfsr_fsm_err, key_deriv_fsm_err, scrmbl_fsm_err;
+  logic lfsr_fsm_err, scrmbl_fsm_err;
   always_comb begin : p_errors_alerts
     hw2reg.err_code = part_error;
     // Note: since these are all fatal alert events, we latch them and keep on sending
@@ -469,7 +470,7 @@ module otp_ctrl
     fatal_check_error_d |= chk_timeout       |
                            lfsr_fsm_err      |
                            scrmbl_fsm_err    |
-                           key_deriv_fsm_err;
+                           |part_fsm_err;
   end
 
   // Assign these to the status register.
@@ -477,7 +478,7 @@ module otp_ctrl
                           chk_timeout,
                           lfsr_fsm_err,
                           scrmbl_fsm_err,
-                          key_deriv_fsm_err,
+                          part_fsm_err[KdiIdx],
                           fatal_bus_integ_error_q,
                           dai_idle,
                           chk_pending};
@@ -491,7 +492,7 @@ module otp_ctrl
     chk_timeout,
     lfsr_fsm_err,
     scrmbl_fsm_err,
-    key_deriv_fsm_err
+    |part_fsm_err
   };
 
   assign otp_error = |(interrupt_triggers_d & ~interrupt_triggers_q);
@@ -668,6 +669,7 @@ module otp_ctrl
     .ack_o     ( edn_ack             ),
     .data_o    ( edn_data            ),
     .fips_o    (                     ), // unused
+    .err_o     (                     ), // unused
     .clk_edn_i,
     .rst_edn_ni,
     .edn_o,
@@ -724,16 +726,25 @@ module otp_ctrl
 
   // Life cycle qualification of TL-UL test interface.
   // SEC_CM: TEST.BUS.LC_GATED
-  assign prim_tl_h2d_gated = (lc_dft_en[0] == lc_ctrl_pkg::On) ?
-                             prim_tl_i : '0;
-  assign prim_tl_o         = (lc_dft_en[1] == lc_ctrl_pkg::On) ?
-                             prim_tl_d2h_gated : '0;
+  tlul_lc_gate #(
+    .NumGatesPerDirection(2)
+  ) u_tlul_lc_gate (
+    .clk_i,
+    .rst_ni,
+    .tl_h2d_i(prim_tl_i),
+    .tl_d2h_o(prim_tl_o),
+    .tl_h2d_o(prim_tl_h2d_gated),
+    .tl_d2h_i(prim_tl_d2h_gated),
+    .lc_en_i (lc_dft_en[0])
+  );
 
   // Test-related GPIOs.
   // SEC_CM: TEST.BUS.LC_GATED
   logic [OtpTestVectWidth-1:0] otp_test_vect;
-  assign cio_test_o = (lc_dft_en[2] == lc_ctrl_pkg::On) ? otp_test_vect : '0;
-  assign cio_test_en_o = (lc_dft_en[2] == lc_ctrl_pkg::On) ? {OtpTestVectWidth{1'b1}} : '0;
+  assign cio_test_o    = (lc_ctrl_pkg::lc_tx_test_true_strict(lc_dft_en[1])) ?
+                         otp_test_vect            : '0;
+  assign cio_test_en_o = (lc_ctrl_pkg::lc_tx_test_true_strict(lc_dft_en[2])) ?
+                         {OtpTestVectWidth{1'b1}} : '0;
 
   // SEC_CM: MACRO.MEM.CM, MACRO.MEM.INTEGRITY
   prim_otp #(
@@ -939,6 +950,7 @@ module otp_ctrl
     .part_init_done_i ( part_init_done                        ),
     .escalate_en_i    ( lc_escalate_en[DaiIdx]                ),
     .error_o          ( part_error[DaiIdx]                    ),
+    .fsm_err_o        ( part_fsm_err[DaiIdx]                  ),
     .part_access_i    ( part_access_dai                       ),
     .dai_addr_i       ( dai_addr                              ),
     .dai_cmd_i        ( dai_cmd                               ),
@@ -987,6 +999,7 @@ module otp_ctrl
     .lci_en_i         ( pwr_otp_o.otp_done                ),
     .escalate_en_i    ( lc_escalate_en[LciIdx]            ),
     .error_o          ( part_error[LciIdx]                ),
+    .fsm_err_o        ( part_fsm_err[LciIdx]              ),
     .lci_prog_idle_o  ( lci_prog_idle                     ),
     .lc_req_i         ( lc_otp_program_i.req              ),
     .lc_data_i        ( lc_otp_program_data               ),
@@ -1028,7 +1041,7 @@ module otp_ctrl
     .rst_ni,
     .kdi_en_i                ( pwr_otp_o.otp_done      ),
     .escalate_en_i           ( lc_escalate_en[KdiIdx]  ),
-    .fsm_err_o               ( key_deriv_fsm_err       ),
+    .fsm_err_o               ( part_fsm_err[KdiIdx]    ),
     .scrmbl_key_seed_valid_i ( scrmbl_key_seed_valid   ),
     .flash_data_key_seed_i   ( flash_data_key_seed     ),
     .flash_addr_key_seed_i   ( flash_addr_key_seed     ),
@@ -1081,6 +1094,7 @@ module otp_ctrl
         .init_done_o   ( part_init_done[k]            ),
         .escalate_en_i ( lc_escalate_en[k]            ),
         .error_o       ( part_error[k]                ),
+        .fsm_err_o     ( part_fsm_err[k]              ),
         .access_i      ( part_access[k]               ),
         .access_o      ( part_access_dai[k]           ),
         .digest_o      ( part_digest[k]               ),
@@ -1141,6 +1155,7 @@ module otp_ctrl
         // Only supported by life cycle partition (see further below).
         .check_byp_en_i    ( lc_ctrl_pkg::Off                ),
         .error_o           ( part_error[k]                   ),
+        .fsm_err_o         ( part_fsm_err[k]                 ),
         .access_i          ( part_access[k]                  ),
         .access_o          ( part_access_dai[k]              ),
         .digest_o          ( part_digest[k]                  ),
@@ -1199,6 +1214,7 @@ module otp_ctrl
         // consistent with the values in the buffer regs anymore).
         .check_byp_en_i    ( lc_check_byp_en                 ),
         .error_o           ( part_error[k]                   ),
+        .fsm_err_o         ( part_fsm_err[k]                 ),
         .access_i          ( part_access[k]                  ),
         .access_o          ( part_access_dai[k]              ),
         .digest_o          ( part_digest[k]                  ),

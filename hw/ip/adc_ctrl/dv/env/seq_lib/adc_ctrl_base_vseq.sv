@@ -78,7 +78,7 @@ class adc_ctrl_base_vseq extends cip_base_vseq #(
     csr_wr(ral.adc_sample_ctl, cfg.np_sample_cnt);
     csr_wr(ral.adc_lp_sample_ctl, cfg.lp_sample_cnt);
     // Power control
-    ral.adc_pd_ctl.lp_mode.set(cfg.testmode inside {AdcCtrlLowpower});
+    ral.adc_pd_ctl.lp_mode.set(cfg.testmode inside {AdcCtrlTestmodeLowpower});
     ral.adc_pd_ctl.pwrup_time.set(cfg.pwrup_time);
     ral.adc_pd_ctl.wakeup_time.set(cfg.wakeup_time);
     csr_wr(ral.adc_pd_ctl, ral.adc_pd_ctl.get());
@@ -113,14 +113,17 @@ class adc_ctrl_base_vseq extends cip_base_vseq #(
   virtual task adc_ctrl_off();
     // Disable assertions which will trigger because of the abrupt turn off
     `DV_ASSERT_CTRL_REQ("ADC_IF_A_CTRL", 0)
+    // Sync to data
+    wait_all_rx();
+    // Delay to allow handshake to complete
+    cfg.clk_aon_rst_vif.wait_clks(5);
+    // Disable ADC_CTRL
     csr_wr(ral.adc_en_ctl, 'h0);
-    fork
-      begin
-        cfg.clk_aon_rst_vif.wait_clks(10);
-        // Turn back on again
-        `DV_ASSERT_CTRL_REQ("ADC_IF_A_CTRL", 1)
-      end
-    join_none
+    // Need to wait long enough for any current ADC access to complete
+    // This will be determined by the push pull agent configuration
+    cfg.clk_aon_rst_vif.wait_clks(40);
+    // Turn back on again
+    `DV_ASSERT_CTRL_REQ("ADC_IF_A_CTRL", 1)
   endtask
 
   // Perform software reset
@@ -134,6 +137,31 @@ class adc_ctrl_base_vseq extends cip_base_vseq #(
     // Re-enable assertions
     `DV_ASSERT_CTRL_REQ("ADC_IF_A_CTRL", 1)
   endtask
+
+  // Deposit a value via DPI and issue a fatal error if it failed
+  virtual function void load_backdoor(input string path, input uvm_hdl_data_t value);
+    int retval;
+    retval = uvm_hdl_deposit(path, value);
+    `DV_CHECK_FATAL(retval, {"uvm_hdl_deposit failed for path ", path})
+  endfunction
+
+  // Load counters backdoor using DPI
+  // This is used to reduce the time required for tests
+  virtual function void load_pwrup_timer_cnt_backdoor(input uvm_hdl_data_t value);
+    load_backdoor("tb.dut.u_adc_ctrl_core.u_adc_ctrl_fsm.pwrup_timer_cnt_q", value);
+  endfunction
+
+  virtual function void load_wakeup_timer_cnt_backdoor(input uvm_hdl_data_t value);
+    load_backdoor("tb.dut.u_adc_ctrl_core.u_adc_ctrl_fsm.wakeup_timer_cnt_q", value);
+  endfunction
+
+  virtual function void load_np_sample_cnt_backdoor(input uvm_hdl_data_t value);
+    load_backdoor("tb.dut.u_adc_ctrl_core.u_adc_ctrl_fsm.np_sample_cnt_q", value);
+  endfunction
+
+  virtual function void load_lp_sample_cnt_backdoor(input uvm_hdl_data_t value);
+    load_backdoor("tb.dut.u_adc_ctrl_core.u_adc_ctrl_fsm.lp_sample_cnt_q", value);
+  endfunction
 
 endclass : adc_ctrl_base_vseq
 

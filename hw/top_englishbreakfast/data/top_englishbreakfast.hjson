@@ -360,6 +360,9 @@
       clock_group: "infra",
       reset_connections: {rst_ni: "lc", rst_otp_ni: "lc_io_div4"},
       base_addrs: {core: "0x41000000", prim: "0x41008000", mem: "0x20000000"}
+      param_decl: {
+        SecScrambleEn: "0"
+      }
       memory: {
         mem: {
           label:      "eflash",
@@ -649,6 +652,7 @@
         'ast.rom_cfg'                  : 'rom_cfg',
         'clkmgr_aon.jitter_en'         : 'clk_main_jitter_en',
         'clkmgr_aon.hi_speed_sel'      : 'hi_speed_sel',
+        'clkmgr_aon.div_step_down_req' : 'div_step_down_req',
         'clkmgr_aon.all_clk_byp_req'   : 'all_clk_byp_req',
         'clkmgr_aon.all_clk_byp_ack'   : 'all_clk_byp_ack',
         'clkmgr_aon.io_clk_byp_req'    : 'io_clk_byp_req',
