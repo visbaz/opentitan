@@ -177,6 +177,11 @@ package otp_ctrl_env_pkg;
     OtpMacroAlert
   } otp_alert_e;
 
+  typedef struct packed {
+    bit read_lock;
+    bit write_lock;
+  } otp_part_access_lock_t;
+
   typedef virtual otp_ctrl_if otp_ctrl_vif;
 
   parameter otp_err_code_e OTP_TERMINAL_ERRS[4] = {OtpMacroEccUncorrError,
@@ -225,6 +230,10 @@ package otp_ctrl_env_pkg;
 
   function automatic bit is_sw_part(bit [TL_DW-1:0] addr);
     int part_idx = get_part_index(addr);
+    return is_sw_part_idx(part_idx);
+  endfunction
+
+  function automatic bit is_sw_part_idx(int part_idx);
     if (part_idx inside {VendorTestIdx, CreatorSwCfgIdx, OwnerSwCfgIdx}) return 1;
     else return 0;
   endfunction

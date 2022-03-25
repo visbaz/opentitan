@@ -19,20 +19,20 @@ cc_library(
 cc_library(
     name = "math_builtins",
     srcs = ["math_builtins.c"],
-    deps = [":macros"],
 
     # This library defines polyfills, so we need to ensure LLVM doesn't make
     # the polyfills call themselves.
     copts = ["-fno-builtin"],
     visibility = ["//visibility:private"],
+    deps = [":macros"],
 )
 
 cc_test(
     name = "math_builtins_unittest",
     srcs = ["math_builtins_unittest.cc"],
     deps = [
-        ":math_builtins",
         ":bitfield",
+        ":math_builtins",
         "@googletest//:gtest_main",
     ],
 )
@@ -143,9 +143,8 @@ cc_library(
     name = "abs_mmio",
     srcs = ["abs_mmio.c"],
     hdrs = ["abs_mmio.h"],
-    target_compatible_with = [OPENTITAN_CPU],
     deps = [
-        ":mmio",
         ":macros",
+        ":mmio",
     ],
 )

@@ -229,7 +229,9 @@
             As mentioned in `prim_count_check`, `prim_fsm_check` and `prim_double_lfsr_check`.
 
             Checks:
-            - TODO, add additional checks if applicable.
+            - Check the value of status register according to where the fault is injected.
+            - Check OTP_CTRL is locked after the fatal fault injection by trying to access OTP_CTRL
+              via dai, kdi, and lci interfaces.
             '''
       milestone: V2S
       tests: ["otp_ctrl_sec_cm"]
@@ -323,6 +325,15 @@
       name: buf_err_code_cg
       desc: '''This is an array of covergroups to cover all applicable error codes in five
             buffered partitions.'''
+    }
+    { // TODO: this is an array of covergroups, confirm if this is the correct format
+      name: unbuf_access_lock_cg_wrap_cg
+      desc: '''This is an array of covergroups to cover lock conditions below in three
+            unbuffered partitions:
+            - the partition is write-locked
+            - the partition is read-locked
+            - the current operation type
+            Then cross the three coverpoints.'''
     }
     {
       name: dai_access_secret2_cg

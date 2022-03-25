@@ -95,13 +95,13 @@ module otbn
   logic busy_execute_d, busy_execute_q;
   logic done, done_core, locked, idle;
   logic illegal_bus_access_d, illegal_bus_access_q;
-  logic dmem_sec_wipe_d, dmem_sec_wipe_q;
-  logic imem_sec_wipe_d, imem_sec_wipe_q;
+  logic dmem_sec_wipe;
+  logic imem_sec_wipe;
   logic mems_sec_wipe;
   logic req_sec_wipe_urnd_keys;
   logic [127:0] dmem_sec_wipe_urnd_key, imem_sec_wipe_urnd_key;
 
-  logic recoverable_err;
+  logic core_recoverable_err, recoverable_err_d, recoverable_err_q;
   logic reg_intg_violation;
   err_bits_t err_bits, err_bits_d, err_bits_q;
   logic err_bits_en;
@@ -277,9 +277,9 @@ module otbn
     .otbn_imem_scramble_valid_o         (otbn_imem_scramble_valid),
     .otbn_imem_scramble_key_seed_valid_o(unused_otbn_imem_scramble_key_seed_valid),
 
-    .otbn_dmem_scramble_sec_wipe_i    (dmem_sec_wipe_q),
+    .otbn_dmem_scramble_sec_wipe_i    (dmem_sec_wipe),
     .otbn_dmem_scramble_sec_wipe_key_i(dmem_sec_wipe_urnd_key),
-    .otbn_imem_scramble_sec_wipe_i    (imem_sec_wipe_q),
+    .otbn_imem_scramble_sec_wipe_i    (imem_sec_wipe),
     .otbn_imem_scramble_sec_wipe_key_i(imem_sec_wipe_urnd_key),
 
     .otbn_dmem_scramble_key_req_busy_o(otbn_dmem_scramble_key_req_busy),
@@ -650,17 +650,17 @@ module otbn
   // CMD register
   always_comb begin
     // start is flopped to avoid long timing paths from the TL fabric into OTBN internals.
-    start_d         = 1'b0;
-    dmem_sec_wipe_d = 1'b0;
-    imem_sec_wipe_d = 1'b0;
+    start_d       = 1'b0;
+    dmem_sec_wipe = 1'b0;
+    imem_sec_wipe = 1'b0;
 
     // Can only start a new command when idle.
     if (idle) begin
       if (reg2hw.cmd.qe) begin
         unique case (reg2hw.cmd.q)
-          CmdExecute:     start_d         = 1'b1;
-          CmdSecWipeDmem: dmem_sec_wipe_d = 1'b1;
-          CmdSecWipeImem: imem_sec_wipe_d = 1'b1;
+          CmdExecute:     start_d       = 1'b1;
+          CmdSecWipeDmem: dmem_sec_wipe = 1'b1;
+          CmdSecWipeImem: imem_sec_wipe = 1'b1;
           default: ;
         endcase
       end
@@ -668,25 +668,13 @@ module otbn
       // OTBN can command a secure wipe of IMEM and DMEM. This occurs when OTBN encounters a fatal
       // error.
       if (mems_sec_wipe) begin
-        dmem_sec_wipe_d = 1'b1;
-        imem_sec_wipe_d = 1'b1;
+        dmem_sec_wipe = 1'b1;
+        imem_sec_wipe = 1'b1;
       end
     end
   end
 
-  // Secure wipe control. In the first cycle temporary scramble keys are requested from URND. These
-  // are available the following cycle where the secure wipe request is sent to scramble_ctrl.
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      dmem_sec_wipe_q <= 1'b0;
-      imem_sec_wipe_q <= 1'b0;
-    end else begin
-      dmem_sec_wipe_q <= dmem_sec_wipe_d;
-      imem_sec_wipe_q <= imem_sec_wipe_d;
-    end
-  end
-
-  assign req_sec_wipe_urnd_keys = dmem_sec_wipe_d | imem_sec_wipe_d;
+  assign req_sec_wipe_urnd_keys = dmem_sec_wipe | imem_sec_wipe;
 
   assign illegal_bus_access_d = dmem_illegal_bus_access | imem_illegal_bus_access;
 
@@ -790,6 +778,18 @@ module otbn
     end
   end
 
+  // Latch the recoverable error signal from the core. This will be generated as a pulse some time
+  // during the run (and before secure wipe finishes). Collect up this bit, clearing on the start or
+  // end of an operation (start_q / done_core, respectively)
+  assign recoverable_err_d = (recoverable_err_q | core_recoverable_err) & ~(start_q | done_core);
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      recoverable_err_q <= '0;
+    end else begin
+      recoverable_err_q <= recoverable_err_d;
+    end
+  end
+
   // FATAL_ALERT_CAUSE register. The .de and .d values are equal for each bit, so that it can only
   // be set, not cleared.
   assign hw2reg.fatal_alert_cause.imem_intg_violation.de = insn_fetch_err;
@@ -833,7 +833,7 @@ module otbn
                               lifecycle_escalation |
                               err_bits.fatal_software;
 
-  assign alerts[AlertRecov] = recoverable_err & done_core;
+  assign alerts[AlertRecov] = recoverable_err_q & done_core;
 
   for (genvar i = 0; i < NumAlerts; i++) begin : gen_alert_tx
     prim_alert_sender #(
@@ -924,7 +924,7 @@ module otbn
     .locked_o                    (locked),
 
     .err_bits_o                  (err_bits),
-    .recoverable_err_o           (recoverable_err),
+    .recoverable_err_o           (core_recoverable_err),
     .reg_intg_violation_o        (reg_intg_violation),
 
     .imem_req_o                  (imem_req_core),

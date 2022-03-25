@@ -82,6 +82,7 @@ opentitan_functest(
     deps = [
         "//sw/device/lib:flash_ctrl",
         "//sw/device/lib/dif:hmac",
+        "//sw/device/lib/testing:hmac_testutils",
     ],
 )
 
@@ -156,8 +157,8 @@ opentitan_functest(
 
 opentitan_functest(
     name = "spi_host_smoketest",
-    targets = ["cw310"],  # Can only run on CW310 board right now.
     srcs = ["spi_host_smoketest.c"],
+    targets = ["cw310"],  # Can only run on CW310 board right now.
     deps = [
         "//sw/device/lib/dif:spi_host",
     ],
