@@ -476,6 +476,16 @@ class i2c_base_vseq extends cip_base_vseq #(
     csr_wr(.ptr(ral.fifo_ctrl.fmtrst), .value(1'b0));
   endtask : reset_fmt_fifo
 
+  task reset_acq_fifo();
+    csr_wr(.ptr(ral.fifo_ctrl.acqrst), .value(1'b1));
+    csr_wr(.ptr(ral.fifo_ctrl.acqrst), .value(1'b0));
+  endtask : reset_acq_fifo
+
+  task reset_tx_fifo();
+    csr_wr(.ptr(ral.fifo_ctrl.txrst), .value(1'b1));
+    csr_wr(.ptr(ral.fifo_ctrl.txrst), .value(1'b0));
+  endtask : reset_tx_fifo
+
   task program_tx_fifo(int tx_bytes);
     for (int i = 0; i < tx_bytes; i++) begin
       `DV_CHECK_MEMBER_RANDOMIZE_FATAL(txdata)
